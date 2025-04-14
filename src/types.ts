@@ -31,6 +31,8 @@ export interface Settings {
     journalSubDirectory: string;
     journalNameFormat: string;
     journalEntryTemplate: string;
+    stringPrefixLetter: string;
+    decoratedTaskSymbol: string;
     dailyNoteTemplate?: string;
     // Measurement file settings
     enableMeasurementFiles: boolean;

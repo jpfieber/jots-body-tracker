@@ -16,11 +16,6 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: 'Body Tracker Settings' });
-
-        // Output Settings
-        containerEl.createEl('h3', { text: 'Output Settings' });
-
         // Journal Entry Settings
         new Setting(containerEl)
             .setName('Enable Journal Entries')
@@ -99,6 +94,32 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                         .setValue(this.plugin.settings.journalEntryTemplate)
                         .onChange(async (value) => {
                             this.plugin.settings.journalEntryTemplate = value;
+                            await this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('String Prefix Letter')
+                .setDesc('The letter to use as prefix in measurement entries (e.g. "b" for "- [b]")')
+                .setClass('settings-indent')
+                .addText(text => {
+                    text.setPlaceholder('b')
+                        .setValue(this.plugin.settings.stringPrefixLetter)
+                        .onChange(async (value) => {
+                            this.plugin.settings.stringPrefixLetter = value;
+                            await this.plugin.saveSettings(); // This will trigger styleManager.updateStyles()
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('Decorated Task Symbol')
+                .setDesc('Set the Data URI for the SVG icon to use before the inserted measurement string.')
+                .setClass('settings-indent')
+                .addText(text => {
+                    text.setPlaceholder('data:image/svg+xml;utf8,...')
+                        .setValue(this.plugin.settings.decoratedTaskSymbol)
+                        .onChange(async (value) => {
+                            this.plugin.settings.decoratedTaskSymbol = value;
                             await this.plugin.saveSettings();
                         });
                 });

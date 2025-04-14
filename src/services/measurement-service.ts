@@ -2,7 +2,7 @@ import { App, TFile } from 'obsidian';
 import type { Settings, MeasurementRecord } from '../types';
 
 export class MeasurementService {
-    constructor(private app: App, private settings: Settings) {}
+    constructor(private app: App, private settings: Settings) { }
 
     async updateMeasurementFiles(data: MeasurementRecord) {
         // Create the measurements folder if it doesn't exist

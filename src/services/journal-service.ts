@@ -45,15 +45,18 @@ export class JournalService {
                 const measurement = this.settings.measurements.find(m => m.name === name);
                 if (!measurement) return null;
 
-                return this.settings.journalEntryTemplate
+                const formattedEntry = this.settings.journalEntryTemplate
                     .replace(/<measured>/g, name)
                     .replace(/<measure>/g, data[name])
                     .replace(/<unit>/g, measurement.unit);
+
+                // Use proper task list syntax: "- [ ]" with the stringPrefixLetter inside the brackets
+                return `- [${this.settings.stringPrefixLetter}] ${formattedEntry}`;
             })
             .filter(line => line !== null)
             .join('\n');
 
-        // Simply append the new measurements to the end of the file with a blank line
+        // Append the new measurements to the end of the file with a blank line
         journalContent = journalContent.trim() + '\n\n' + measurementLines + '\n';
 
         // Update the file

@@ -119,3 +119,24 @@
     background-color: var(--interactive-accent);
     color: var(--text-on-accent);
 }
+
+/* Style for measurement entries */
+.body-measurement-entry {
+    position: relative;
+    padding-left: 24px;
+    margin: 4px 0;
+}
+
+/* Hide the original task marker */
+.body-measurement-entry .task-list-item-checkbox {
+    display: none;
+}
+
+/* Base styles for measurement entries */
+.markdown-preview-view ul > li.task-list-item {
+    margin: 4px 0;
+}
+
+.markdown-preview-view ul > li.task-list-item input.task-list-item-checkbox {
+    display: none !important;
+}
