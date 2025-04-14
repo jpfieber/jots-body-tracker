@@ -34,7 +34,6 @@ async function processTemplate(app: App, dateStr: string, templateContent: strin
 
     // Get the filename without extension for the title
     const fileName = momentDate.format('YYYY-MM-DD_ddd');
-    console.log('File name:', fileName);
 
     return content
         .replace(/{{title}}/g, fileName)

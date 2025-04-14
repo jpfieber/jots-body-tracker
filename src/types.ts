@@ -37,4 +37,7 @@ export interface Settings {
     // Measurement file settings
     enableMeasurementFiles: boolean;
     measurementFolder: string;
+    measurementFileTemplate?: string;
+    measurementEntryTemplate: string;
+    measurementFileNameFormat: string;
 }

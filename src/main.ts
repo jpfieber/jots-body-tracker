@@ -60,7 +60,10 @@ export default class BodyTrackerPlugin extends Plugin {
             journalEntryTemplate: '(measured:: <measured>): (measure:: <measure>)<unit>',
             // Measurement file settings
             enableMeasurementFiles: false,
-            measurementFolder: 'Measurements'
+            measurementFolder: 'Measurements',
+            measurementFileTemplate: undefined,
+            measurementEntryTemplate: '| <date> | <user> | <measure> |',
+            measurementFileNameFormat: '<measure>'
         }, await this.loadData());
     }
 

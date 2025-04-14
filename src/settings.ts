@@ -153,6 +153,48 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                     // Initialize folder suggester
                     new FolderSuggest(this.app, text.inputEl);
                 });
+
+            new Setting(containerEl)
+                .setName('Measurement File Template')
+                .setDesc('Template file to use when creating new measurement files (.md files only)')
+                .setClass('settings-indent')
+                .addSearch((cb) => {
+                    new FileSuggest(this.app, cb.inputEl);
+                    cb.setPlaceholder("templates/measurement.md")
+                        .setValue(this.plugin.settings.measurementFileTemplate || '')
+                        .onChange((new_path) => {
+                            this.plugin.settings.measurementFileTemplate = new_path;
+                            this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('Measurement Entry Template')
+                .setDesc('Template for each measurement entry. Available placeholders: <date>, <user>, <measure>, <unit>')
+                .setClass('settings-indent')
+                .addText(text => {
+                    text.setPlaceholder('| <date> | <user> | <measure> |')
+                        .setValue(this.plugin.settings.measurementEntryTemplate)
+                        .onChange(async (value) => {
+                            this.plugin.settings.measurementEntryTemplate = value;
+                            await this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('Measurement File Name Format')
+                .setDesc('Format for measurement file names. Available placeholders: <measure>, <user>')
+                .setClass('settings-indent')
+                .addText(text => {
+                    text.setPlaceholder('<measure>')
+                        .setValue(this.plugin.settings.measurementFileNameFormat)
+                        .onChange(async (value) => {
+                            this.plugin.settings.measurementFileNameFormat = value;
+                            await this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
         }
 
         // Add a spacer
