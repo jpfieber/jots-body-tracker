@@ -4,7 +4,7 @@ import type { Settings, MeasurementRecord } from '../types';
 export class MeasurementService {
     constructor(private app: App, private settings: Settings) { }
 
-    private formatMermaidChart(data: Array<{date: string, value: string}>): string {
+    private formatMermaidChart(data: Array<{ date: string, value: string }>): string {
         const chartData = data
             .sort((a, b) => a.date.localeCompare(b.date))
             .map(item => `    "${item.date}" : ${item.value}`);
@@ -28,12 +28,12 @@ ${chartData.join('\n')}
             const value = data[measurement.name];
             if (value !== undefined) {
                 const user = this.settings.users.find(u => u.id === data.userId);
-                
+
                 // Create file name using template
                 const fileName = this.settings.measurementFileNameFormat
                     .replace(/<measure>/g, measurement.name)
                     .replace(/<user>/g, user?.name || 'Unknown');
-                    
+
                 const filePath = `${this.settings.measurementFolder}/${fileName}.md`;
 
                 // Create entry line using template
@@ -45,7 +45,7 @@ ${chartData.join('\n')}
 
                 // Get or create file with template
                 let content = '';
-                let measurementData: Array<{date: string, value: string}> = [];
+                let measurementData: Array<{ date: string, value: string }> = [];
                 const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
                 if (existingFile instanceof TFile) {
@@ -53,7 +53,7 @@ ${chartData.join('\n')}
                     // Parse existing data from the table
                     const tableLines = content.split('\n').filter(line => line.startsWith('|') && line.includes(measurement.unit));
                     measurementData = tableLines.map(line => {
-                        const [date,,value] = line.split('|').map(cell => cell.trim());
+                        const [date, , value] = line.split('|').map(cell => cell.trim());
                         return { date, value: value.replace(measurement.unit, '').trim() };
                     });
                 } else {
@@ -69,7 +69,7 @@ ${chartData.join('\n')}
                                 .replace(/<unit>/g, measurement.unit);
                         }
                     }
-                    
+
                     // If no template or template file not found, use default header
                     if (!content) {
                         content = `# ${measurement.name} History\n\n| Date | User | Value |\n|------|------|-------|\n`;

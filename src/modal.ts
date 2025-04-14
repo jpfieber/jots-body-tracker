@@ -87,8 +87,6 @@ export class MeasurementModal extends Modal {
     }
 
     private handleSubmit(dateStr: string, userId: string, measurements: { [key: string]: string }) {
-        console.log('[Modal] Received date in handleSubmit:', dateStr);
-
         // Create the measurement record
         const measurementData: MeasurementRecord = {
             date: dateStr,
@@ -104,7 +102,6 @@ export class MeasurementModal extends Modal {
 
         // Call the plugin's saveMeasurement method
         this.plugin.saveMeasurement(measurementData);
-        console.log('Measurement data saved:', measurementData);
     }
 }
 

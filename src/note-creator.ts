@@ -47,21 +47,11 @@ async function processTemplate(app: App, dateStr: string, templateContent: strin
  * Get the full path for a note based on date and settings
  */
 export function getNotePath(dateStr: string, settings: NoteCreatorSettings): { notePath: string, noteName: string } {
-    console.log('[NoteCreator] Getting note path for date:', dateStr);
-
     const momentDate = moment.default(dateStr).hours(12);
     const placeholders = createDatePlaceholders(momentDate);
-    console.log('[NoteCreator] Created placeholders:', placeholders);
-
     const noteName = replacePlaceholders(settings.nameFormat, placeholders) + (!settings.nameFormat.endsWith('.md') ? '.md' : '');
     const subFolder = replacePlaceholders(settings.subFolder, placeholders);
     const notePath = normalizePath(`${settings.rootFolder}/${subFolder}/${noteName}`);
-
-    console.log('[NoteCreator] Generated paths:', {
-        noteName,
-        subFolder,
-        fullPath: notePath
-    });
 
     return { notePath, noteName };
 }

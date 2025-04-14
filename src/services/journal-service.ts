@@ -5,7 +5,7 @@ import type { NoteCreatorSettings } from '../note-creator';
 import { getJournalPath } from './path-service';
 
 export class JournalService {
-    constructor(private app: App, private settings: Settings) {}
+    constructor(private app: App, private settings: Settings) { }
 
     async appendToJournal(data: MeasurementRecord) {
         const journalPath = getJournalPath(data.date, this.settings);
@@ -56,8 +56,8 @@ export class JournalService {
             .filter(line => line !== null)
             .join('\n');
 
-        // Append the new measurements to the end of the file with a blank line
-        journalContent = journalContent.trim() + '\n\n' + measurementLines + '\n';
+        // Append the new measurements to the end of the file with a single newline
+        journalContent = journalContent.trim() + '\n' + measurementLines + '\n';
 
         // Update the file
         if (file instanceof TFile) {

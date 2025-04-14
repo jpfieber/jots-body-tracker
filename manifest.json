@@ -5,7 +5,9 @@
   "author": "Joseph Fieber",
   "description": "A plugin for tracking body measurements in Obsidian.",
   "main": "main.js",
-  "stylesheets": ["styles.css"],
+  "stylesheets": [
+    "styles.css"
+  ],
   "minAppVersion": "0.12.0",
   "apiVersion": "1.0.0",
   "permissions": [

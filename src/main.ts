@@ -13,11 +13,12 @@ export default class BodyTrackerPlugin extends Plugin {
     private styleManager!: StyleManager;
 
     async onload() {
+        console.log('Body Tracker: Loading plugin...');
         await this.loadSettings();
         this.journalService = new JournalService(this.app, this.settings);
         this.measurementService = new MeasurementService(this.app, this.settings);
         this.styleManager = new StyleManager();
-        
+
         // Initial style update
         this.styleManager.updateStyles(this.settings);
 
@@ -33,6 +34,7 @@ export default class BodyTrackerPlugin extends Plugin {
     }
 
     onunload() {
+        console.log('Body Tracker: Unloading plugin...');
         this.styleManager.removeStyles();
     }
 
@@ -78,8 +80,6 @@ export default class BodyTrackerPlugin extends Plugin {
     }
 
     async saveMeasurement(measurementData: MeasurementRecord) {
-        console.log('[Main] Received measurement data:', measurementData);
-
         if (!this.settings.measurementHistory) {
             this.settings.measurementHistory = [];
         }
@@ -89,7 +89,6 @@ export default class BodyTrackerPlugin extends Plugin {
 
         // Handle journal entry if enabled
         if (this.settings.enableJournalEntry) {
-            console.log('[Main] Creating journal entry for date:', measurementData.date);
             await this.journalService.appendToJournal(measurementData);
         }
 
