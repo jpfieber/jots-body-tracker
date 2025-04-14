@@ -1,6 +1,7 @@
-import { App, PluginSettingTab, Setting, setIcon } from 'obsidian';
+import { App, PluginSettingTab, Setting, setIcon, SearchComponent } from 'obsidian';
 import { Settings, User, Measurement, MeasurementUnit } from './types';
 import { FolderSuggest } from './foldersuggester';
+import { FileSuggest } from './filesuggester';
 import BodyTrackerPlugin from './main';
 
 export class BodyTrackerSettingsTab extends PluginSettingTab {
@@ -47,6 +48,59 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
 
                     // Initialize folder suggester
                     new FolderSuggest(this.app, text.inputEl);
+                });
+
+            new Setting(containerEl)
+                .setName('Journal Subdirectory Format')
+                .setDesc('Format for organizing journal files in subfolders (e.g. YYYY/YYYY-MM)')
+                .setClass('settings-indent')
+                .addText(text => {
+                    text.setPlaceholder('YYYY/YYYY-MM')
+                        .setValue(this.plugin.settings.journalSubDirectory)
+                        .onChange(async (value) => {
+                            this.plugin.settings.journalSubDirectory = value;
+                            await this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('Journal Name Format')
+                .setDesc('Format for journal filenames (e.g. YYYY-MM-DD_DDD for 2025-04-13_Sun)')
+                .setClass('settings-indent')
+                .addText(text => {
+                    text.setPlaceholder('YYYY-MM-DD_DDD')
+                        .setValue(this.plugin.settings.journalNameFormat)
+                        .onChange(async (value) => {
+                            this.plugin.settings.journalNameFormat = value;
+                            await this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('Daily Note Template')
+                .setDesc('Template file to use when creating new daily notes (.md files only)')
+                .setClass('settings-indent')
+                .addSearch((cb) => {
+                    new FileSuggest(this.app, cb.inputEl);
+                    cb.setPlaceholder("templates/daily.md")
+                        .setValue(this.plugin.settings.dailyNoteTemplate || '')
+                        .onChange((new_path) => {
+                            this.plugin.settings.dailyNoteTemplate = new_path;
+                            this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('Journal Entry Template')
+                .setDesc('Template for each measurement entry. Use <measured>, <measure>, and <unit> as placeholders')
+                .setClass('settings-indent')
+                .addText(text => {
+                    text.setPlaceholder('- <measured>: <measure> <unit>')
+                        .setValue(this.plugin.settings.journalEntryTemplate)
+                        .onChange(async (value) => {
+                            this.plugin.settings.journalEntryTemplate = value;
+                            await this.plugin.saveSettings();
+                        });
                 });
         }
 

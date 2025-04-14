@@ -1,5 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
-import type { Settings, User, Measurement } from './types';
+import type { Settings, User, Measurement, MeasurementRecord } from './types';
 
 export class MeasurementModal extends Modal {
     private settings: Settings;
@@ -22,7 +22,10 @@ export class MeasurementModal extends Modal {
             .setName('Date')
             .addText(text => {
                 text.inputEl.type = 'date';
-                text.setValue(new Date().toISOString().split('T')[0]);
+                // Set today's date in YYYY-MM-DD format
+                const moment = (window as any).moment;
+                const today = moment().format('YYYY-MM-DD');
+                text.setValue(today);
                 return text;
             });
 
@@ -51,9 +54,14 @@ export class MeasurementModal extends Modal {
                 .setName(`${measurement.name} (${currentUnit})`)
                 .addText(text => {
                     text.inputEl.type = 'number';
+                    text.inputEl.step = '0.1';
                     text.setPlaceholder(`Enter ${measurement.name.toLowerCase()}`);
                     text.onChange(value => {
-                        this.measurementValues[measurement.name] = value;
+                        if (value) {
+                            this.measurementValues[measurement.name] = value;
+                        } else {
+                            delete this.measurementValues[measurement.name];
+                        }
                     });
                     return text;
                 });
@@ -65,9 +73,9 @@ export class MeasurementModal extends Modal {
                 .setButtonText('Submit')
                 .setCta()
                 .onClick(() => {
-                    const date = (contentEl.querySelector('input[type="date"]') as HTMLInputElement).value;
+                    const dateStr = (contentEl.querySelector('input[type="date"]') as HTMLInputElement).value;
                     const userId = (contentEl.querySelector('.dropdown') as HTMLSelectElement).value;
-                    this.handleSubmit(date, userId, this.measurementValues);
+                    this.handleSubmit(dateStr, userId, this.measurementValues);
                     this.close();
                 }));
     }
@@ -78,14 +86,25 @@ export class MeasurementModal extends Modal {
         this.measurementValues = {};
     }
 
-    private handleSubmit(date: string, userId: string, measurements: { [key: string]: string }) {
-        const measurementData = {
-            date,
+    private handleSubmit(dateStr: string, userId: string, measurements: { [key: string]: string }) {
+        console.log('[Modal] Received date in handleSubmit:', dateStr);
+
+        // Create the measurement record
+        const measurementData: MeasurementRecord = {
+            date: dateStr,
             userId,
-            ...measurements
         };
 
+        // Add each measurement with its value
+        Object.entries(measurements).forEach(([name, value]) => {
+            if (value && value.trim() !== '') {
+                measurementData[name] = value;
+            }
+        });
+
+        // Call the plugin's saveMeasurement method
         this.plugin.saveMeasurement(measurementData);
+        console.log('Measurement data saved:', measurementData);
     }
 }
 

@@ -25,9 +25,14 @@ export interface Settings {
     measurementSystem: MeasurementSystem;
     defaultUser?: string;
     measurementHistory: MeasurementRecord[];
-    // New settings
+    // Journal settings
     enableJournalEntry: boolean;
     journalFolder: string;
+    journalSubDirectory: string;
+    journalNameFormat: string;
+    journalEntryTemplate: string;
+    dailyNoteTemplate?: string;
+    // Measurement file settings
     enableMeasurementFiles: boolean;
     measurementFolder: string;
 }
