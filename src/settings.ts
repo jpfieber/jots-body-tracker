@@ -16,7 +16,87 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
+        // Google Fit Integration Settings
+        containerEl.createEl('h3', { text: 'Google Fit Integration' });
+
+        new Setting(containerEl)
+            .setName('Enable Google Fit Integration')
+            .setDesc('Sync measurements from your Google Fit account')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableGoogleFit ?? false)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableGoogleFit = value;
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
+
+        if (this.plugin.settings.enableGoogleFit) {
+            new Setting(containerEl)
+                .setName('Client ID')
+                .setDesc('Your Google Fit API Client ID')
+                .setClass('settings-indent')
+                .addText(text => text
+                    .setPlaceholder('Enter Client ID')
+                    .setValue(this.plugin.settings.googleClientId || '')
+                    .onChange(async (value) => {
+                        this.plugin.settings.googleClientId = value;
+                        await this.plugin.saveSettings();
+                        this.plugin.setupGoogleFitService();
+                    }));
+
+            new Setting(containerEl)
+                .setName('Client Secret')
+                .setDesc('Your Google Fit API Client Secret')
+                .setClass('settings-indent')
+                .addText(text => text
+                    .setPlaceholder('Enter Client Secret')
+                    .setValue(this.plugin.settings.googleClientSecret || '')
+                    .onChange(async (value) => {
+                        this.plugin.settings.googleClientSecret = value;
+                        await this.plugin.saveSettings();
+                        this.plugin.setupGoogleFitService();
+                    }));
+
+            const authStatus = this.plugin.settings.googleAccessToken ? 'Connected' : 'Not Connected';
+            new Setting(containerEl)
+                .setName('Connection Status')
+                .setDesc(`Status: ${authStatus}`)
+                .setClass('settings-indent')
+                .addButton(button => button
+                    .setButtonText(authStatus === 'Connected' ? 'Disconnect' : 'Connect')
+                    .setCta()
+                    .onClick(async () => {
+                        if (authStatus === 'Connected') {
+                            // Clear tokens
+                            this.plugin.settings.googleAccessToken = '';
+                            this.plugin.settings.googleRefreshToken = '';
+                            this.plugin.settings.googleTokenExpiry = undefined;
+                            await this.plugin.saveSettings();
+                            this.display();
+                        } else {
+                            // Start OAuth flow
+                            await this.plugin.googleFitService?.authenticate();
+                        }
+                    }));
+
+            new Setting(containerEl)
+                .setName('Auto-Sync Interval')
+                .setDesc('How often to automatically sync with Google Fit (in minutes, 0 to disable)')
+                .setClass('settings-indent')
+                .addText(text => text
+                    .setPlaceholder('60')
+                    .setValue(String(this.plugin.settings.googleAutoSyncInterval || 0))
+                    .onChange(async (value) => {
+                        const interval = parseInt(value) || 0;
+                        this.plugin.settings.googleAutoSyncInterval = interval;
+                        await this.plugin.saveSettings();
+                        this.plugin.setupGoogleFitSync();
+                    }));
+        }
+
         // Journal Entry Settings
+        containerEl.createEl('h3', { text: 'Journal Entries' });
+
         new Setting(containerEl)
             .setName('Enable Journal Entries')
             .setDesc('Add measurements to your daily journal')
@@ -29,47 +109,43 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                 }));
 
         if (this.plugin.settings.enableJournalEntry) {
-            const journalFolderSetting = new Setting(containerEl)
+            new Setting(containerEl)
                 .setName('Journal Folder')
                 .setDesc('Folder where your daily journal entries are stored')
                 .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('Journal')
+                .addSearch((cb) => {
+                    new FolderSuggest(this.app, cb.inputEl);
+                    cb.setPlaceholder("Journal")
                         .setValue(this.plugin.settings.journalFolder)
                         .onChange(async (value) => {
                             this.plugin.settings.journalFolder = value;
                             await this.plugin.saveSettings();
                         });
-
-                    // Initialize folder suggester
-                    new FolderSuggest(this.app, text.inputEl);
                 });
 
             new Setting(containerEl)
                 .setName('Journal Subdirectory Format')
                 .setDesc('Format for organizing journal files in subfolders (e.g. YYYY/YYYY-MM)')
                 .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('YYYY/YYYY-MM')
-                        .setValue(this.plugin.settings.journalSubDirectory)
-                        .onChange(async (value) => {
-                            this.plugin.settings.journalSubDirectory = value;
-                            await this.plugin.saveSettings();
-                        });
-                });
+                .addText(text => text
+                    .setPlaceholder('YYYY/YYYY-MM')
+                    .setValue(this.plugin.settings.journalSubDirectory)
+                    .onChange(async (value) => {
+                        this.plugin.settings.journalSubDirectory = value;
+                        await this.plugin.saveSettings();
+                    }));
 
             new Setting(containerEl)
                 .setName('Journal Name Format')
                 .setDesc('Format for journal filenames (e.g. YYYY-MM-DD_DDD for 2025-04-13_Sun)')
                 .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('YYYY-MM-DD_DDD')
-                        .setValue(this.plugin.settings.journalNameFormat)
-                        .onChange(async (value) => {
-                            this.plugin.settings.journalNameFormat = value;
-                            await this.plugin.saveSettings();
-                        });
-                });
+                .addText(text => text
+                    .setPlaceholder('YYYY-MM-DD_DDD')
+                    .setValue(this.plugin.settings.journalNameFormat)
+                    .onChange(async (value) => {
+                        this.plugin.settings.journalNameFormat = value;
+                        await this.plugin.saveSettings();
+                    }));
 
             new Setting(containerEl)
                 .setName('Daily Note Template')
@@ -89,118 +165,30 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                 .setName('Journal Entry Template')
                 .setDesc('Template for each measurement entry. Use <measured>, <measure>, and <unit> as placeholders')
                 .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('- <measured>: <measure> <unit>')
-                        .setValue(this.plugin.settings.journalEntryTemplate)
-                        .onChange(async (value) => {
-                            this.plugin.settings.journalEntryTemplate = value;
-                            await this.plugin.saveSettings();
-                        });
-                });
+                .addText(text => text
+                    .setPlaceholder('<measured>: <measure> <unit>')
+                    .setValue(this.plugin.settings.journalEntryTemplate)
+                    .onChange(async (value) => {
+                        this.plugin.settings.journalEntryTemplate = value;
+                        await this.plugin.saveSettings();
+                    }));
 
             new Setting(containerEl)
-                .setName('String Prefix Letter')
+                .setName('Task Prefix')
                 .setDesc('The letter to use as prefix in measurement entries (e.g. "b" for "- [b]")')
                 .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('b')
-                        .setValue(this.plugin.settings.stringPrefixLetter)
-                        .onChange(async (value) => {
-                            this.plugin.settings.stringPrefixLetter = value;
-                            await this.plugin.saveSettings(); // This will trigger styleManager.updateStyles()
-                        });
-                });
-
-            new Setting(containerEl)
-                .setName('Decorated Task Symbol')
-                .setDesc('Set the Data URI for the SVG icon to use before the inserted measurement string.')
-                .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('data:image/svg+xml;utf8,...')
-                        .setValue(this.plugin.settings.decoratedTaskSymbol)
-                        .onChange(async (value) => {
-                            this.plugin.settings.decoratedTaskSymbol = value;
-                            await this.plugin.saveSettings();
-                        });
-                });
+                .addText(text => text
+                    .setPlaceholder('b')
+                    .setValue(this.plugin.settings.stringPrefixLetter)
+                    .onChange(async (value) => {
+                        this.plugin.settings.stringPrefixLetter = value;
+                        await this.plugin.saveSettings();
+                    }));
         }
-
-        // Measurement Files Settings
-        new Setting(containerEl)
-            .setName('Enable Measurement Files')
-            .setDesc('Create individual files for each measurement type')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.enableMeasurementFiles)
-                .onChange(async (value) => {
-                    this.plugin.settings.enableMeasurementFiles = value;
-                    await this.plugin.saveSettings();
-                    this.display();
-                }));
-
-        if (this.plugin.settings.enableMeasurementFiles) {
-            const measurementFolderSetting = new Setting(containerEl)
-                .setName('Measurement Files Folder')
-                .setDesc('Folder where measurement files will be stored')
-                .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('Measurements')
-                        .setValue(this.plugin.settings.measurementFolder)
-                        .onChange(async (value) => {
-                            this.plugin.settings.measurementFolder = value;
-                            await this.plugin.saveSettings();
-                        });
-
-                    // Initialize folder suggester
-                    new FolderSuggest(this.app, text.inputEl);
-                });
-
-            new Setting(containerEl)
-                .setName('Measurement File Template')
-                .setDesc('Template file to use when creating new measurement files (.md files only)')
-                .setClass('settings-indent')
-                .addSearch((cb) => {
-                    new FileSuggest(this.app, cb.inputEl);
-                    cb.setPlaceholder("templates/measurement.md")
-                        .setValue(this.plugin.settings.measurementFileTemplate || '')
-                        .onChange((new_path) => {
-                            this.plugin.settings.measurementFileTemplate = new_path;
-                            this.plugin.saveSettings();
-                        });
-                });
-
-            new Setting(containerEl)
-                .setName('Measurement Entry Template')
-                .setDesc('Template for each measurement entry. Available placeholders: <date>, <user>, <measure>, <unit>')
-                .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('| <date> | <user> | <measure> |')
-                        .setValue(this.plugin.settings.measurementEntryTemplate)
-                        .onChange(async (value) => {
-                            this.plugin.settings.measurementEntryTemplate = value;
-                            await this.plugin.saveSettings();
-                        });
-                });
-
-            new Setting(containerEl)
-                .setName('Measurement File Name Format')
-                .setDesc('Format for measurement file names. Available placeholders: <measure>, <user>')
-                .setClass('settings-indent')
-                .addText(text => {
-                    text.setPlaceholder('<measure>')
-                        .setValue(this.plugin.settings.measurementFileNameFormat)
-                        .onChange(async (value) => {
-                            this.plugin.settings.measurementFileNameFormat = value;
-                            await this.plugin.saveSettings();
-                        });
-                });
-
-            new Setting(containerEl)
-        }
-
-        // Add a spacer
-        containerEl.createEl('div', { cls: 'settings-separator' }).style.margin = '2em 0';
 
         // Measurement System Selection
+        containerEl.createEl('h3', { text: 'Measurement System' });
+
         new Setting(containerEl)
             .setName('Default Measurement System')
             .setDesc('Choose your preferred measurement system')
@@ -288,7 +276,7 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
         // Add table header
         const headerRow = measurementsContainer.createDiv('measurements-table-header');
         headerRow.createDiv().setText('Measure');
-        headerRow.createDiv().setText('Units');
+        headerRow.createDiv().setText('Type');
         headerRow.createDiv().setText('Controls');
 
         // Add existing measurements
@@ -299,10 +287,10 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
             const nameCell = measurementRow.createDiv('measurements-name-cell');
             nameCell.setText(measurement.name);
 
-            // Unit dropdown cell
-            const unitCell = measurementRow.createDiv('measurements-unit-cell');
-            const unitDropdown = new Setting(unitCell);
-            unitDropdown.addDropdown(dropdown => {
+            // Type dropdown cell
+            const typeCell = measurementRow.createDiv('measurements-unit-cell');
+            const typeDropdown = new Setting(typeCell);
+            typeDropdown.addDropdown(dropdown => {
                 const system = this.plugin.settings.measurementSystem;
                 const lengthUnit = system === 'metric' ? 'Length (cm)' : 'Length (in)';
                 const weightUnit = system === 'metric' ? 'Weight (kg)' : 'Weight (lbs)';
@@ -363,10 +351,10 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                 }));
         });
 
-        // Add new measurement button
+        // Add new measurement row
         const newMeasurementRow = measurementsContainer.createDiv('measurements-table-row');
 
-        // Name cell
+        // Name input
         const newNameCell = newMeasurementRow.createDiv('measurements-name-cell');
         const nameInput = newNameCell.createEl('input', {
             attr: {
@@ -375,27 +363,27 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
             }
         });
 
-        // Unit dropdown cell
-        const newUnitCell = newMeasurementRow.createDiv('measurements-unit-cell');
-        const unitSelect = newUnitCell.createEl('select');
+        // Type dropdown
+        const newTypeCell = newMeasurementRow.createDiv('measurements-unit-cell');
+        const typeSelect = newTypeCell.createEl('select');
         const system = this.plugin.settings.measurementSystem;
-        const lengthOption = unitSelect.createEl('option', {
+        typeSelect.createEl('option', {
             text: `Length (${system === 'metric' ? 'cm' : 'in'})`,
             value: 'length'
         });
-        const weightOption = unitSelect.createEl('option', {
+        typeSelect.createEl('option', {
             text: `Weight (${system === 'metric' ? 'kg' : 'lbs'})`,
             value: 'weight'
         });
 
-        // Add button cell
+        // Add button
         const newControlsCell = newMeasurementRow.createDiv('measurements-controls-cell');
         const addButton = newControlsCell.createEl('button', {
             text: 'Add'
         });
         addButton.addEventListener('click', async () => {
             const measurementName = nameInput.value;
-            const measurementType = unitSelect.value as 'length' | 'weight';
+            const measurementType = typeSelect.value as 'length' | 'weight';
 
             if (measurementName) {
                 const units = this.plugin.getUnitForMeasurement(measurementType);

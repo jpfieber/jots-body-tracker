@@ -5,6 +5,7 @@
 
 .settings-indent {
     margin-left: 24px !important;
+    padding-left: 2em;
 }
 
 .settings-separator {
@@ -143,4 +144,73 @@
 /* Hide the original task marker */
 .body-measurement-entry .task-list-item-checkbox {
     display: none;
+}
+
+/* Withings Authentication Modal */
+.withings-auth-modal input {
+    width: 100%;
+    margin-bottom: 1em;
+    padding: 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+}
+
+.withings-auth-modal button {
+    width: 100%;
+    padding: 8px;
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.withings-auth-modal button:hover {
+    background-color: var(--interactive-accent-hover);
+}
+
+/* Withings Settings */
+.withings-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.withings-status-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+}
+
+.withings-status-icon.connected {
+    background-color: var(--interactive-success);
+}
+
+.withings-status-icon.disconnected {
+    background-color: var(--text-muted);
+}
+
+/* Withings Sync Progress */
+.withings-sync-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 8px;
+    margin-top: 1em;
+    background-color: var(--background-secondary);
+    border-radius: 4px;
+}
+
+.withings-sync-progress-bar {
+    flex-grow: 1;
+    height: 4px;
+    background-color: var(--background-modifier-border);
+    border-radius: 2px;
+}
+
+.withings-sync-progress-bar .progress {
+    height: 100%;
+    background-color: var(--interactive-accent);
+    border-radius: 2px;
+    transition: width 0.3s ease;
 }
