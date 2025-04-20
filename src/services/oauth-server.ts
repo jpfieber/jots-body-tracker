@@ -33,7 +33,7 @@ export class OAuthCallbackServer {
             this.server = http.createServer((req: any, res: any) => {
                 try {
                     console.log('Received request:', req.url);
-                    
+
                     // Always parse URL relative to localhost
                     const parsedUrl = new URL(req.url, 'http://localhost:16321');
                     console.log('Parsed URL:', {
@@ -55,7 +55,7 @@ export class OAuthCallbackServer {
 
                         if (code && state) {
                             this.handleCallback(params);
-                            res.writeHead(200, { 
+                            res.writeHead(200, {
                                 'Content-Type': 'text/html',
                                 'Connection': 'close'
                             });
@@ -97,7 +97,7 @@ export class OAuthCallbackServer {
                                 </html>
                             `);
                         } else {
-                            res.writeHead(400, { 
+                            res.writeHead(400, {
                                 'Content-Type': 'text/html',
                                 'Connection': 'close'
                             });
@@ -140,7 +140,7 @@ export class OAuthCallbackServer {
                             `);
                         }
                     } else {
-                        res.writeHead(404, { 
+                        res.writeHead(404, {
                             'Content-Type': 'text/html',
                             'Connection': 'close'
                         });
@@ -148,7 +148,7 @@ export class OAuthCallbackServer {
                     }
                 } catch (error) {
                     console.error('Error handling OAuth callback:', error);
-                    res.writeHead(500, { 
+                    res.writeHead(500, {
                         'Content-Type': 'text/html',
                         'Connection': 'close'
                     });
@@ -220,8 +220,8 @@ export class OAuthCallbackServer {
         const state = params.get('state');
 
         if (!code || !state) {
-            console.error('Invalid callback parameters:', { 
-                hasCode: !!code, 
+            console.error('Invalid callback parameters:', {
+                hasCode: !!code,
                 hasState: !!state,
                 params: Object.fromEntries(params.entries())
             });

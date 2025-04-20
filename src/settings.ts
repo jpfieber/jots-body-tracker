@@ -19,10 +19,10 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
         containerEl.empty();
 
         // Ensure we have the latest settings state before rendering
-        const hasValidTokens = this.plugin.settings.googleRefreshToken && 
-            (this.plugin.settings.googleAccessToken || 
-            (this.plugin.settings.googleTokenExpiry && Date.now() < this.plugin.settings.googleTokenExpiry));
-        
+        const hasValidTokens = this.plugin.settings.googleRefreshToken &&
+            (this.plugin.settings.googleAccessToken ||
+                (this.plugin.settings.googleTokenExpiry && Date.now() < this.plugin.settings.googleTokenExpiry));
+
         const isConnected = hasValidTokens && this.plugin.googleFitService !== undefined;
 
         // Google Fit Integration Settings
@@ -74,8 +74,8 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                         requestAnimationFrame(() => this.display());
                     }));
 
-            const statusDesc = isConnected ? 'Connected' : 
-                (!this.plugin.settings.googleClientId || !this.plugin.settings.googleClientSecret) ? 
+            const statusDesc = isConnected ? 'Connected' :
+                (!this.plugin.settings.googleClientId || !this.plugin.settings.googleClientSecret) ?
                     'Missing API credentials' : 'Not Connected';
 
             const authSetting = new Setting(containerEl)

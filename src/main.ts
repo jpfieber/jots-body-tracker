@@ -29,7 +29,7 @@ export default class BodyTrackerPlugin extends Plugin {
         // Initialize Google Fit service and setup sync if enabled
         if (this.settings.enableGoogleFit) {
             await this.setupGoogleFitService();
-            
+
             // If we have a refresh token, try to restore the connection
             if (this.settings.googleRefreshToken) {
                 try {
@@ -37,7 +37,7 @@ export default class BodyTrackerPlugin extends Plugin {
                     if (!this.googleFitService) {
                         await this.setupGoogleFitService();
                     }
-                    
+
                     // Try to refresh the token
                     await this.googleFitService?.refreshTokenIfNeeded().catch(error => {
                         console.error('Failed to refresh Google Fit token on load:', error);
@@ -111,19 +111,19 @@ export default class BodyTrackerPlugin extends Plugin {
             hasRefreshToken: !!this.settings.googleRefreshToken,
             tokenExpiry: this.settings.googleTokenExpiry ? new Date(this.settings.googleTokenExpiry).toISOString() : undefined
         });
-        
+
         await this.saveData(this.settings);
-        
+
         // Update styles whenever settings are saved
         this.styleManager.updateStyles(this.settings);
-        
+
         // Force refresh ALL settings tabs to ensure connection status is updated
         const settingsLeaf = this.app.workspace.getLeavesOfType('settings')[0];
         if (settingsLeaf) {
             const settingsTab = settingsLeaf.view;
             const activeTabId = (settingsTab as any)?.currentTab?.id;
             console.log('Current settings tab:', activeTabId);
-            
+
             // If we're on our tab, force an immediate refresh
             if (activeTabId === 'body-tracker') {
                 const tab = (settingsTab as any)?.tabContentContainer?.children?.['body-tracker'];
@@ -170,13 +170,13 @@ export default class BodyTrackerPlugin extends Plugin {
                         hasRefreshToken: !!settings.googleRefreshToken,
                         tokenExpiry: settings.googleTokenExpiry ? new Date(settings.googleTokenExpiry).toISOString() : undefined
                     });
-                    
+
                     // Update our settings
                     this.settings = settings;
-                    
+
                     // Save settings to disk
                     await this.saveData(this.settings);
-                    
+
                     // Update any open settings tabs immediately
                     const settingsLeaf = this.app.workspace.getLeavesOfType('settings')[0];
                     if (settingsLeaf) {
@@ -193,7 +193,7 @@ export default class BodyTrackerPlugin extends Plugin {
                 },
                 app: this.app
             });
-            
+
             console.log('Google Fit service initialized');
             this.setupGoogleFitSync();
         } else {

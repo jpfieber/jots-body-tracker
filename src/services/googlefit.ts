@@ -63,7 +63,7 @@ export class GoogleFitService {
     async authenticate(): Promise<boolean> {
         const state = Math.random().toString(36).substring(7);
         console.log('Starting OAuth flow with state:', state);
-        
+
         // Save auth state and wait for it to persist
         this.settings.googleAuthState = state;
         await this.onSettingsChange(this.settings);
@@ -82,7 +82,7 @@ export class GoogleFitService {
         console.log('Opening auth URL:', authUrl);
 
         // Ensure server is running before opening URL
-        await this.oauthServer.close().catch(() => {}); // Close any existing server
+        await this.oauthServer.close().catch(() => { }); // Close any existing server
         await this.oauthServer.start();
         console.log('OAuth server started');
 
@@ -101,10 +101,10 @@ export class GoogleFitService {
             // Complete authentication with received code
             console.log('Starting token exchange...');
             await this.completeAuthentication(code, returnedState);
-            
+
             // Wait a moment for settings to be saved and UI to update
             await new Promise(resolve => setTimeout(resolve, 500));
-            
+
             // Verify the tokens were saved
             if (!this.settings.googleAccessToken || !this.settings.googleRefreshToken) {
                 throw new Error('Authentication failed - tokens not saved');
@@ -164,12 +164,12 @@ export class GoogleFitService {
             if (!tokens.access_token || !tokens.refresh_token) {
                 throw new Error('Invalid token response - missing required tokens');
             }
-            
+
             // Update tokens and save settings
             this.settings.googleAccessToken = tokens.access_token;
             this.settings.googleRefreshToken = tokens.refresh_token;
             this.settings.googleTokenExpiry = Date.now() + (tokens.expires_in * 1000);
-            
+
             console.log('Saving tokens...', {
                 hasAccessToken: !!this.settings.googleAccessToken,
                 hasRefreshToken: !!this.settings.googleRefreshToken,
@@ -187,7 +187,7 @@ export class GoogleFitService {
             if (settingsTab?.id === 'body-tracker') {
                 requestAnimationFrame(() => settingsTab.display());
             }
-            
+
             new Notice('Successfully connected to Google Fit');
         } catch (error) {
             console.error('Token exchange failed:', error);
