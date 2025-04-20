@@ -87,9 +87,11 @@ export class MeasurementModal extends Modal {
     }
 
     private handleSubmit(dateStr: string, userId: string, measurements: { [key: string]: string }) {
-        // Create the measurement record
+        // Create the measurement record with the current time
+        const moment = (window as any).moment;
+        const currentTime = moment().format('HH:mm');
         const measurementData: MeasurementRecord = {
-            date: dateStr,
+            date: `${dateStr} ${currentTime}`,  // Include both date and time
             userId,
         };
 

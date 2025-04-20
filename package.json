@@ -1,8 +1,8 @@
 {
   "name": "jots-body-tracker",
   "version": "1.0.0",
-  "description": "An Obsidian plugin to track body measurements.",
-  "main": "dist/main.js",
+  "description": "Track body measurements with Google Fit and Withings integration in Obsidian",
+  "main": "main.js",
   "scripts": {
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs --watch",
@@ -10,11 +10,12 @@
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
-    "obsidian": "^0.12.0"
+    "obsidian": "^1.4.11"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-node-resolve": "^16.0.1",
+    "@types/node": "^22.14.1",
     "esbuild": "^0.12.0",
     "rimraf": "^5.0.10",
     "rollup": "^2.56.3",
@@ -25,8 +26,14 @@
   "keywords": [
     "obsidian",
     "plugin",
-    "body measurements"
+    "body-tracking",
+    "google-fit",
+    "withings"
   ],
-  "author": "Your Name",
-  "license": "MIT"
+  "author": "Joseph Fieber",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jpfieber/jots-body-tracker"
+  }
 }

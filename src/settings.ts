@@ -6,15 +6,24 @@ import BodyTrackerPlugin from './main';
 
 export class BodyTrackerSettingsTab extends PluginSettingTab {
     plugin: BodyTrackerPlugin;
+    private lastConnectionState?: boolean;
 
     constructor(app: App, plugin: BodyTrackerPlugin) {
         super(app, plugin);
         this.plugin = plugin;
+        this.lastConnectionState = undefined;
     }
 
     display(): void {
         const { containerEl } = this;
         containerEl.empty();
+
+        // Ensure we have the latest settings state before rendering
+        const hasValidTokens = this.plugin.settings.googleRefreshToken && 
+            (this.plugin.settings.googleAccessToken || 
+            (this.plugin.settings.googleTokenExpiry && Date.now() < this.plugin.settings.googleTokenExpiry));
+        
+        const isConnected = hasValidTokens && this.plugin.googleFitService !== undefined;
 
         // Google Fit Integration Settings
         containerEl.createEl('h3', { text: 'Google Fit Integration' });
@@ -27,7 +36,13 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.enableGoogleFit = value;
                     await this.plugin.saveSettings();
-                    this.display();
+                    if (value) {
+                        await this.plugin.setupGoogleFitService();
+                    } else {
+                        // Clear service when disabled
+                        this.plugin.googleFitService = undefined;
+                    }
+                    requestAnimationFrame(() => this.display());
                 }));
 
         if (this.plugin.settings.enableGoogleFit) {
@@ -41,7 +56,8 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.googleClientId = value;
                         await this.plugin.saveSettings();
-                        this.plugin.setupGoogleFitService();
+                        await this.plugin.setupGoogleFitService();
+                        requestAnimationFrame(() => this.display());
                     }));
 
             new Setting(containerEl)
@@ -54,44 +70,71 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.googleClientSecret = value;
                         await this.plugin.saveSettings();
-                        this.plugin.setupGoogleFitService();
+                        await this.plugin.setupGoogleFitService();
+                        requestAnimationFrame(() => this.display());
                     }));
 
-            const authStatus = this.plugin.settings.googleAccessToken ? 'Connected' : 'Not Connected';
-            new Setting(containerEl)
+            const statusDesc = isConnected ? 'Connected' : 
+                (!this.plugin.settings.googleClientId || !this.plugin.settings.googleClientSecret) ? 
+                    'Missing API credentials' : 'Not Connected';
+
+            const authSetting = new Setting(containerEl)
                 .setName('Connection Status')
-                .setDesc(`Status: ${authStatus}`)
-                .setClass('settings-indent')
-                .addButton(button => button
-                    .setButtonText(authStatus === 'Connected' ? 'Disconnect' : 'Connect')
+                .setDesc(`Status: ${statusDesc}`)
+                .setClass('settings-indent');
+
+            if (this.plugin.settings.googleClientId && this.plugin.settings.googleClientSecret) {
+                authSetting.addButton(button => button
+                    .setButtonText(isConnected ? 'Disconnect' : 'Connect')
                     .setCta()
                     .onClick(async () => {
-                        if (authStatus === 'Connected') {
+                        if (isConnected) {
                             // Clear tokens
                             this.plugin.settings.googleAccessToken = '';
                             this.plugin.settings.googleRefreshToken = '';
                             this.plugin.settings.googleTokenExpiry = undefined;
                             await this.plugin.saveSettings();
-                            this.display();
+                            // Reset service
+                            this.plugin.googleFitService = undefined;
+                            requestAnimationFrame(() => this.display());
                         } else {
-                            // Start OAuth flow
-                            await this.plugin.googleFitService?.authenticate();
+                            try {
+                                // Ensure service is initialized
+                                await this.plugin.setupGoogleFitService();
+                                if (!this.plugin.googleFitService) {
+                                    throw new Error('Failed to initialize Google Fit service');
+                                }
+
+                                // Start OAuth flow
+                                const success = await this.plugin.googleFitService.authenticate();
+                                if (!success) {
+                                    new Notice('Failed to connect to Google Fit. Please try again.');
+                                }
+                                requestAnimationFrame(() => this.display());
+                            } catch (error) {
+                                console.error('Failed to authenticate:', error);
+                                new Notice('Failed to connect to Google Fit: ' + (error instanceof Error ? error.message : 'Unknown error'));
+                            }
                         }
                     }));
+            }
 
-            new Setting(containerEl)
-                .setName('Auto-Sync Interval')
-                .setDesc('How often to automatically sync with Google Fit (in minutes, 0 to disable)')
-                .setClass('settings-indent')
-                .addText(text => text
-                    .setPlaceholder('60')
-                    .setValue(String(this.plugin.settings.googleAutoSyncInterval || 0))
-                    .onChange(async (value) => {
-                        const interval = parseInt(value) || 0;
-                        this.plugin.settings.googleAutoSyncInterval = interval;
-                        await this.plugin.saveSettings();
-                        this.plugin.setupGoogleFitSync();
-                    }));
+            // Only show auto-sync setting if connected
+            if (isConnected) {
+                new Setting(containerEl)
+                    .setName('Auto-Sync Interval')
+                    .setDesc('How often to automatically sync with Google Fit (in minutes, 0 to disable)')
+                    .setClass('settings-indent')
+                    .addText(text => text
+                        .setPlaceholder('60')
+                        .setValue(String(this.plugin.settings.googleAutoSyncInterval || 0))
+                        .onChange(async (value) => {
+                            const interval = parseInt(value) || 0;
+                            this.plugin.settings.googleAutoSyncInterval = interval;
+                            await this.plugin.saveSettings();
+                            this.plugin.setupGoogleFitSync();
+                        }));
+            }
         }
 
         // Journal Entry Settings
@@ -182,6 +225,17 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.stringPrefixLetter)
                     .onChange(async (value) => {
                         this.plugin.settings.stringPrefixLetter = value;
+                        await this.plugin.saveSettings();
+                    }));
+
+            new Setting(containerEl)
+                .setName('In Callout')
+                .setDesc('Place entries in a callout block')
+                .setClass('settings-indent')
+                .addToggle(toggle => toggle
+                    .setValue(this.plugin.settings.enableJournalEntryCallout ?? false)
+                    .onChange(async (value) => {
+                        this.plugin.settings.enableJournalEntryCallout = value;
                         await this.plugin.saveSettings();
                     }));
         }

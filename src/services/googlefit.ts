@@ -1,5 +1,6 @@
-import { requestUrl, Notice } from 'obsidian';
+import { request, Notice, App } from 'obsidian';
 import type { Settings } from '../types';
+import { OAuthCallbackServer } from './oauth-server';
 
 interface GoogleFitAuthConfig {
     clientId: string;
@@ -16,6 +17,7 @@ interface GoogleFitMeasurement {
 
 interface GoogleFitServiceConfig extends GoogleFitAuthConfig {
     onSettingsChange: (settings: Settings) => Promise<void>;
+    app: App;
 }
 
 const SCOPES = [
@@ -24,19 +26,34 @@ const SCOPES = [
 ];
 
 export class GoogleFitService {
+    private settings: Settings;
+    private clientId: string;
+    private clientSecret: string;
+    private redirectUri: string;
+    private scope: string[];
+    private onSettingsChange: (settings: Settings) => Promise<void>;
+    private app: App;
     private lastRequestTime = 0;
     private readonly minRequestInterval = 1000; // 1 second between requests
+    readonly oauthServer: OAuthCallbackServer;
+    private moment = (window as any).moment;
 
-    constructor(
-        private settings: Settings,
-        private config: GoogleFitServiceConfig
-    ) {}
+    constructor(settings: Settings, config: GoogleFitServiceConfig) {
+        this.settings = settings;
+        this.clientId = config.clientId;
+        this.clientSecret = config.clientSecret;
+        this.redirectUri = config.redirectUri;
+        this.scope = config.scope;
+        this.onSettingsChange = config.onSettingsChange;
+        this.app = config.app;
+        this.oauthServer = new OAuthCallbackServer(config.app);
+    }
 
     private async rateLimit() {
         const now = Date.now();
         const timeSinceLastRequest = now - this.lastRequestTime;
         if (timeSinceLastRequest < this.minRequestInterval) {
-            await new Promise(resolve => 
+            await new Promise(resolve =>
                 setTimeout(resolve, this.minRequestInterval - timeSinceLastRequest)
             );
         }
@@ -45,97 +62,272 @@ export class GoogleFitService {
 
     async authenticate(): Promise<boolean> {
         const state = Math.random().toString(36).substring(7);
+        console.log('Starting OAuth flow with state:', state);
+        
+        // Save auth state and wait for it to persist
         this.settings.googleAuthState = state;
-        await this.config.onSettingsChange(this.settings);
+        await this.onSettingsChange(this.settings);
 
         const params = new URLSearchParams({
-            client_id: this.config.clientId,
-            redirect_uri: this.config.redirectUri,
+            client_id: this.clientId,
+            redirect_uri: 'http://localhost:16321/callback',  // Explicitly include /callback path
             response_type: 'code',
             scope: SCOPES.join(' '),
             access_type: 'offline',
-            state: state
+            state: state,
+            prompt: 'consent'  // Always show consent screen to ensure we get refresh token
         });
 
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-        window.open(authUrl);
+        console.log('Opening auth URL:', authUrl);
 
-        new Notice(
-            'Google Fit Authentication:\n\n' +
-            '1. Complete authorization in your browser\n' +
-            '2. After authorizing, you will be redirected\n' +
-            '3. Copy both the "code" and "state" parameters\n' +
-            '4. Use Command Palette and run "Complete Google Fit Authentication"\n' +
-            '5. Paste the code and state in the dialog',
-            20000
-        );
+        // Ensure server is running before opening URL
+        await this.oauthServer.close().catch(() => {}); // Close any existing server
+        await this.oauthServer.start();
+        console.log('OAuth server started');
 
-        return true;
+        try {
+            // Open auth URL in default browser
+            window.open(authUrl);
+
+            console.log('Waiting for OAuth callback...');
+            const { code, state: returnedState } = await this.oauthServer.waitForCallback();
+            console.log('Received OAuth callback:', { hasCode: !!code, returnedState });
+
+            if (!code || !returnedState) {
+                throw new Error('Authentication failed - no code or state received');
+            }
+
+            // Complete authentication with received code
+            console.log('Starting token exchange...');
+            await this.completeAuthentication(code, returnedState);
+            
+            // Wait a moment for settings to be saved and UI to update
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Verify the tokens were saved
+            if (!this.settings.googleAccessToken || !this.settings.googleRefreshToken) {
+                throw new Error('Authentication failed - tokens not saved');
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Authentication failed:', error);
+            new Notice('Authentication failed. Please try again.');
+            return false;
+        } finally {
+            // Only close the server after everything is done
+            try {
+                await this.oauthServer.close();
+                console.log('OAuth server closed');
+            } catch (e) {
+                console.error('Error closing OAuth server:', e);
+            }
+        }
     }
 
-    async completeAuthentication(code: string, state: string): Promise<boolean> {
+    async completeAuthentication(code: string, state: string): Promise<void> {
+        console.log('Completing authentication...', {
+            hasCode: !!code,
+            state,
+            expectedState: this.settings.googleAuthState,
+            matches: state === this.settings.googleAuthState
+        });
+
         if (state !== this.settings.googleAuthState) {
+            console.error('State mismatch:', {
+                received: state,
+                expected: this.settings.googleAuthState
+            });
             throw new Error('Invalid authentication state');
         }
 
         try {
-            const response = await requestUrl({
+            console.log('Exchanging code for tokens...');
+            const response = await request({
                 url: 'https://oauth2.googleapis.com/token',
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 },
                 body: new URLSearchParams({
-                    client_id: this.config.clientId,
-                    client_secret: this.config.clientSecret,
+                    client_id: this.clientId,
+                    client_secret: this.clientSecret,
                     code: code,
                     grant_type: 'authorization_code',
-                    redirect_uri: this.config.redirectUri
+                    redirect_uri: this.redirectUri
                 }).toString()
             });
 
-            const tokens = response.json;
+            console.log('Received token response');
+            const tokens = JSON.parse(response);
+            if (!tokens.access_token || !tokens.refresh_token) {
+                throw new Error('Invalid token response - missing required tokens');
+            }
+            
+            // Update tokens and save settings
             this.settings.googleAccessToken = tokens.access_token;
             this.settings.googleRefreshToken = tokens.refresh_token;
             this.settings.googleTokenExpiry = Date.now() + (tokens.expires_in * 1000);
-            await this.config.onSettingsChange(this.settings);
+            
+            console.log('Saving tokens...', {
+                hasAccessToken: !!this.settings.googleAccessToken,
+                hasRefreshToken: !!this.settings.googleRefreshToken,
+                tokenExpiry: new Date(this.settings.googleTokenExpiry || 0).toISOString()
+            });
 
-            return true;
+            // Save settings and wait for callback to complete
+            await this.onSettingsChange(this.settings);
+
+            // Give the UI a moment to update
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Force a final UI refresh via app
+            const settingsTab = (this.app as any).setting?.activeTab;
+            if (settingsTab?.id === 'body-tracker') {
+                requestAnimationFrame(() => settingsTab.display());
+            }
+            
+            new Notice('Successfully connected to Google Fit');
         } catch (error) {
-            console.error('Google Fit token request error:', error);
+            console.error('Token exchange failed:', error);
+            // Clear any partial token state on failure
+            this.settings.googleAccessToken = '';
+            this.settings.googleRefreshToken = '';
+            this.settings.googleTokenExpiry = undefined;
+            await this.onSettingsChange(this.settings);
             throw error;
         }
     }
 
-    private async refreshTokenIfNeeded(): Promise<void> {
-        if (!this.settings.googleRefreshToken) return;
+    private async ensureValidToken(): Promise<void> {
+        // If we have an expiry time and the token is expired or about to expire (within 5 minutes)
+        if (this.settings.googleTokenExpiry && Date.now() + 300000 > this.settings.googleTokenExpiry) {
+            await this.refreshAccessToken();
+        }
+    }
+
+    private async refreshAccessToken(): Promise<void> {
+        if (!this.settings.googleRefreshToken) {
+            throw new Error('No refresh token available');
+        }
+
+        try {
+            const response = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    client_id: this.clientId,
+                    client_secret: this.clientSecret,
+                    refresh_token: this.settings.googleRefreshToken,
+                    grant_type: 'refresh_token',
+                }),
+            });
+
+            let errorData = {};
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                // Ignore JSON parse errors for non-JSON responses
+            }
+
+            if (!response.ok) {
+                console.error('Failed to refresh token:', { status: response.status, data: errorData });
+
+                // Only clear tokens for specific OAuth errors that indicate the refresh token is invalid
+                if (response.status === 400 || response.status === 401) {
+                    const errorMessage = (errorData as any).error;
+                    if (errorMessage === 'invalid_grant' || errorMessage === 'invalid_token') {
+                        this.settings.googleAccessToken = '';
+                        this.settings.googleRefreshToken = '';
+                        this.settings.googleTokenExpiry = undefined;
+                        await this.onSettingsChange(this.settings);
+                        throw new Error('Failed to refresh token - please reconnect your account');
+                    }
+                }
+
+                // For other errors (network, server issues), keep the refresh token
+                throw new Error('Failed to refresh token - please try again later');
+            }
+
+            // At this point we know we have a successful response with JSON data
+            const data = errorData as any; // Reuse the parsed response
+            if (!data.access_token) {
+                throw new Error('Invalid response from token endpoint');
+            }
+
+            // Update tokens and expiry
+            this.settings.googleAccessToken = data.access_token;
+            this.settings.googleTokenExpiry = Date.now() + (data.expires_in * 1000);
+            // Only update refresh token if we got a new one
+            if (data.refresh_token) {
+                this.settings.googleRefreshToken = data.refresh_token;
+            }
+            await this.onSettingsChange(this.settings);
+        } catch (error) {
+            console.error('Failed to refresh access token:', error);
+            // Only clear tokens and rethrow for specific OAuth errors
+            if (error instanceof Error && error.message.includes('please reconnect')) {
+                throw error;
+            }
+            // For other errors, keep the refresh token and throw a retriable error
+            throw new Error('Failed to refresh token - please try again later');
+        }
+    }
+
+    public async refreshTokenIfNeeded(): Promise<void> {
+        // Check if we have any authentication tokens
+        if (!this.settings.googleAccessToken && !this.settings.googleRefreshToken) {
+            throw new Error('Not authenticated with Google Fit. Please disconnect and reconnect your account.');
+        }
 
         const now = Date.now();
         const expiryTime = this.settings.googleTokenExpiry || 0;
+        const refreshBuffer = 300000; // 5 minutes in milliseconds
 
-        if (now >= expiryTime - 60000) { // Refresh if token expires in less than a minute
-            try {
-                const response = await requestUrl({
-                    url: 'https://oauth2.googleapis.com/token',
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: new URLSearchParams({
-                        client_id: this.config.clientId,
-                        client_secret: this.config.clientSecret,
-                        refresh_token: this.settings.googleRefreshToken,
-                        grant_type: 'refresh_token'
-                    }).toString()
-                });
+        // Attempt refresh if:
+        // 1. No access token exists
+        // 2. Token is expired or about to expire
+        // 3. Token expiry time is missing (shouldn't happen, but handle it)
+        if (!this.settings.googleAccessToken || !this.settings.googleTokenExpiry || (now >= expiryTime - refreshBuffer)) {
+            if (!this.settings.googleRefreshToken) {
+                // Only clear access token and expiry if refresh token is missing
+                this.settings.googleAccessToken = undefined;
+                this.settings.googleTokenExpiry = undefined;
+                await this.onSettingsChange(this.settings);
+                throw new Error('Not authenticated with Google Fit. Please disconnect and reconnect your account.');
+            }
 
-                const tokens = response.json;
-                this.settings.googleAccessToken = tokens.access_token;
-                this.settings.googleTokenExpiry = Date.now() + (tokens.expires_in * 1000);
-                await this.config.onSettingsChange(this.settings);
-            } catch (error) {
-                console.error('Failed to refresh token:', error);
-                throw error;
+            let retryCount = 2;
+            let lastError: Error | undefined;
+
+            while (retryCount > 0) {
+                try {
+                    await this.refreshAccessToken();
+                    // Success - exit retry loop
+                    return;
+                } catch (error) {
+                    lastError = error as Error;
+                    retryCount--;
+
+                    // Don't retry if it's an auth error (invalid/expired refresh token)
+                    if (error instanceof Error && error.message.includes('please reconnect')) {
+                        throw error;
+                    }
+
+                    // For other errors (network, etc.), retry after a delay if we have retries left
+                    if (retryCount > 0) {
+                        console.log(`Token refresh attempt failed, retrying in 1s... (${retryCount} retries left)`);
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+
+            // If we get here, all retries failed
+            if (lastError) {
+                throw lastError;
             }
         }
     }
@@ -145,10 +337,20 @@ export class GoogleFitService {
         await this.refreshTokenIfNeeded();
 
         try {
+            // Convert Unix timestamps to nanoseconds
+            const startTimeNs = startTime * 1000000000;
+            const endTimeNs = endTime * 1000000000;
+
+            console.log('GoogleFit: Querying for time range:', {
+                start: new Date(startTime * 1000).toISOString(),
+                end: new Date(endTime * 1000).toISOString(),
+                startTimeNs,
+                endTimeNs
+            });
+
             // Get weight data
-            const weightResponse = await requestUrl({
-                url: 'https://www.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.weight:com.google.android.gms:merged/datasets/' + 
-                     (startTime * 1000000000) + '-' + (endTime * 1000000000),
+            const weightResponse = await request({
+                url: `https://www.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.weight:com.google.android.gms:merge_weight/datasets/${startTimeNs}-${endTimeNs}`,
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${this.settings.googleAccessToken}`,
@@ -156,23 +358,34 @@ export class GoogleFitService {
                 }
             });
 
+            console.log('GoogleFit: Raw weight response:', weightResponse);
+            const weightData = JSON.parse(weightResponse);
+            console.log('GoogleFit: Parsed weight data:', weightData);
             const measurements: GoogleFitMeasurement[] = [];
-            
+
             // Process weight data
-            if (weightResponse.json.point) {
-                for (const point of weightResponse.json.point) {
+            if (weightData.point && weightData.point.length > 0) {
+                console.log('GoogleFit: Found weight data points:', weightData.point.length);
+                for (const point of weightData.point) {
                     const timestamp = Math.floor(parseInt(point.startTimeNanos) / 1000000000);
-                    measurements.push({
+                    const measurement = {
                         date: timestamp,
                         weight: point.value[0].fpVal
+                    };
+                    console.log('GoogleFit: Processing weight measurement:', {
+                        date: new Date(timestamp * 1000).toISOString(),
+                        weight: measurement.weight,
+                        source: point.originDataSourceId
                     });
+                    measurements.push(measurement);
                 }
+            } else {
+                console.log('GoogleFit: No weight data points found in the response');
             }
 
             // Get body fat data
-            const bodyFatResponse = await requestUrl({
-                url: 'https://www.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.body.fat.percentage:com.google.android.gms:merged/datasets/' +
-                     (startTime * 1000000000) + '-' + (endTime * 1000000000),
+            const bodyFatResponse = await request({
+                url: `https://www.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.body.fat.percentage:com.google.android.gms:merge_body_fat_percentage/datasets/${startTimeNs}-${endTimeNs}`,
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${this.settings.googleAccessToken}`,
@@ -180,26 +393,52 @@ export class GoogleFitService {
                 }
             });
 
+            console.log('GoogleFit: Raw body fat response:', bodyFatResponse);
+            const bodyFatData = JSON.parse(bodyFatResponse);
+            console.log('GoogleFit: Parsed body fat data:', bodyFatData);
+
             // Process body fat data
-            if (bodyFatResponse.json.point) {
-                for (const point of bodyFatResponse.json.point) {
+            if (bodyFatData.point && bodyFatData.point.length > 0) {
+                console.log('GoogleFit: Found body fat data points:', bodyFatData.point.length);
+                for (const point of bodyFatData.point) {
                     const timestamp = Math.floor(parseInt(point.startTimeNanos) / 1000000000);
                     const measurement = measurements.find(m => m.date === timestamp);
-                    
+
                     if (measurement) {
                         measurement.bodyFat = point.value[0].fpVal;
-                    } else {
-                        measurements.push({
-                            date: timestamp,
+                        console.log('GoogleFit: Added body fat to existing measurement:', {
+                            date: new Date(timestamp * 1000).toISOString(),
                             bodyFat: point.value[0].fpVal
                         });
+                    } else {
+                        const newMeasurement = {
+                            date: timestamp,
+                            bodyFat: point.value[0].fpVal
+                        };
+                        console.log('GoogleFit: Created new measurement for body fat:', {
+                            date: new Date(timestamp * 1000).toISOString(),
+                            bodyFat: point.value[0].fpVal
+                        });
+                        measurements.push(newMeasurement);
                     }
                 }
+            } else {
+                console.log('GoogleFit: No body fat data points found in the response');
             }
 
+            console.log('GoogleFit: Final measurements:', measurements.map(m => ({
+                date: new Date(m.date * 1000).toISOString(),
+                weight: m.weight,
+                bodyFat: m.bodyFat
+            })));
             return measurements;
         } catch (error) {
-            console.error('Failed to fetch Google Fit measurements:', error);
+            console.error('GoogleFit: Failed to fetch measurements:', {
+                error,
+                message: error instanceof Error ? error.message : 'Unknown error',
+                response: (error as any).response,
+                stack: error instanceof Error ? error.stack : undefined
+            });
             throw error;
         }
     }
@@ -212,7 +451,7 @@ export class GoogleFitService {
 
         try {
             // Add weight measurement
-            await requestUrl({
+            await request({
                 url: `https://www.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.weight:com.google.android.gms:merge_weight/datasets/${nanos}-${nanos}`,
                 method: 'PATCH',
                 headers: {
@@ -234,7 +473,7 @@ export class GoogleFitService {
 
             // Add body fat measurement if provided
             if (bodyFat !== undefined) {
-                await requestUrl({
+                await request({
                     url: `https://www.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.body.fat.percentage:com.google.android.gms:merge_body_fat_percentage/datasets/${nanos}-${nanos}`,
                     method: 'PATCH',
                     headers: {
@@ -254,6 +493,8 @@ export class GoogleFitService {
                     })
                 });
             }
+
+            new Notice('Measurements added to Google Fit');
         } catch (error) {
             console.error('Failed to add Google Fit measurement:', error);
             throw error;

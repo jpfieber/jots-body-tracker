@@ -1,67 +1,110 @@
 import { App, TFile } from 'obsidian';
 import type { Settings, MeasurementRecord } from '../types';
-import { createNewNote } from '../note-creator';
-import type { NoteCreatorSettings } from '../note-creator';
-import { getJournalPath } from './path-service';
 
 export class JournalService {
+    private moment = (window as any).moment;
+
     constructor(private app: App, private settings: Settings) { }
 
-    async appendToJournal(data: MeasurementRecord) {
-        const journalPath = getJournalPath(data.date, this.settings);
-        let file = this.app.vault.getAbstractFileByPath(journalPath);
-        let journalContent = '';
+    private getJournalPath(dateTime: moment.Moment): string {
+        // Use the local date components to determine the journal path
+        const formattedPath = dateTime.format(this.settings.journalSubDirectory);
+        return `${this.settings.journalFolder}/${formattedPath}`;
+    }
 
-        // If file doesn't exist, create it using note creator
-        if (!(file instanceof TFile)) {
-            const settings: NoteCreatorSettings = {
-                rootFolder: this.settings.journalFolder,
-                subFolder: this.settings.journalSubDirectory,
-                nameFormat: this.settings.journalNameFormat,
-                templatePath: this.settings.dailyNoteTemplate
-            };
+    private async createJournalPath(path: string): Promise<void> {
+        const parts = path.split('/');
+        let currentPath = '';
 
-            try {
-                const moment = (window as any).moment;
-                const titleDate = moment(data.date);
-                const title = '# ' + titleDate.format('dddd, MMMM D, YYYY');
-                file = await createNewNote(this.app, data.date, journalPath, settings, title);
-            } catch (error) {
-                console.error('Failed to create note:', error);
-                await this.app.vault.createFolder(this.settings.journalFolder);
-                file = await this.app.vault.create(journalPath, '');
+        for (const part of parts) {
+            currentPath += (currentPath ? '/' : '') + part;
+            await this.app.vault.createFolder(currentPath).catch(() => { });
+        }
+    }
+
+    private hasExistingEntry(content: string, entry: string): boolean {
+        // Convert both the content and entry to their non-decorated versions for comparison
+        const normalizeEntry = (text: string) => {
+            return text.replace(/^>?\s*/, '')  // Remove any callout markers
+                .replace(/^\s*-\s*\[[^\]]+\]\s*/, '')  // Remove task markers
+                .trim();
+        };
+
+        const normalizedEntry = normalizeEntry(entry);
+        const lines = content.split('\n');
+
+        return lines.some(line => normalizeEntry(line) === normalizedEntry);
+    }
+
+    async appendToJournal(data: MeasurementRecord): Promise<void> {
+        // Parse the full date-time string to preserve local time
+        const dateTime = this.moment(data.date, 'YYYY-MM-DD HH:mm');
+        const journalPath = this.getJournalPath(dateTime);
+        await this.createJournalPath(journalPath);
+
+        console.log('Journal: Writing to journal path:', journalPath);
+
+        // Get journal file name for the date, using local date components
+        const fileName = dateTime.format(this.settings.journalNameFormat) + '.md';
+        const filePath = `${journalPath}/${fileName}`;
+
+        console.log('Journal: Target journal file:', filePath);
+
+        // Create entries for each measurement
+        for (const measurement of this.settings.measurements) {
+            const value = data[measurement.name];
+            if (value !== undefined) {
+                // Get the appropriate unit based on measurement type and system
+                const unit = measurement.type === 'weight'
+                    ? (this.settings.measurementSystem === 'metric' ? 'kg' : 'lbs')
+                    : (this.settings.measurementSystem === 'metric' ? 'cm' : 'in');
+
+                // Format the entry using the template and add task prefix
+                const entryContent = this.settings.journalEntryTemplate
+                    .replace(/<measured>/g, measurement.name)
+                    .replace(/<measure>/g, value)
+                    .replace(/<unit>/g, unit);
+
+                let entry = `- [${this.settings.stringPrefixLetter}] ${entryContent}`;
+
+                if (this.settings.enableJournalEntryCallout) {
+                    entry = `> ${entry}`;
+                }
+
+                console.log('Journal: Creating entry:', {
+                    measurement: measurement.name,
+                    value,
+                    unit,
+                    entry
+                });
+
+                // Append to journal file
+                let fileContent = '';
+                const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+                if (existingFile instanceof TFile) {
+                    fileContent = await this.app.vault.read(existingFile);
+                }
+
+                // Only add the entry if it doesn't already exist
+                if (!this.hasExistingEntry(fileContent, entry)) {
+                    // Add the entry, ensuring no blank lines if in a callout
+                    if (fileContent) {
+                        if (this.settings.enableJournalEntryCallout) {
+                            // Remove any trailing newlines to avoid breaking the callout
+                            fileContent = fileContent.replace(/\n+$/, '') + '\n';
+                        } else if (!fileContent.endsWith('\n')) {
+                            fileContent += '\n';
+                        }
+                    }
+                    fileContent += entry + '\n';
+
+                    if (existingFile instanceof TFile) {
+                        await this.app.vault.modify(existingFile, fileContent);
+                    } else {
+                        await this.app.vault.create(filePath, fileContent);
+                    }
+                }
             }
-        }
-
-        // Read existing content
-        if (file instanceof TFile) {
-            journalContent = await this.app.vault.read(file);
-        }
-
-        // Format measurements using template
-        const measurementLines = Object.entries(data)
-            .filter(([key]) => key !== 'date' && key !== 'userId')
-            .map(([name]) => {
-                const measurement = this.settings.measurements.find(m => m.name === name);
-                if (!measurement) return null;
-
-                const formattedEntry = this.settings.journalEntryTemplate
-                    .replace(/<measured>/g, name)
-                    .replace(/<measure>/g, data[name])
-                    .replace(/<unit>/g, measurement.unit);
-
-                // Use proper task list syntax: "- [ ]" with the stringPrefixLetter inside the brackets
-                return `- [${this.settings.stringPrefixLetter}] ${formattedEntry}`;
-            })
-            .filter(line => line !== null)
-            .join('\n');
-
-        // Append the new measurements to the end of the file with a single newline
-        journalContent = journalContent.trim() + '\n' + measurementLines + '\n';
-
-        // Update the file
-        if (file instanceof TFile) {
-            await this.app.vault.modify(file, journalContent);
         }
     }
 }

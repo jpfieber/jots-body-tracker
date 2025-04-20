@@ -23,6 +23,7 @@ export interface MeasurementRecord {
 export interface Settings {
     // Journal settings
     enableJournalEntry: boolean;
+    enableJournalEntryCallout: boolean;
     journalFolder: string;
     journalSubDirectory: string;
     journalNameFormat: string;
