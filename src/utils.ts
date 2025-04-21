@@ -8,3 +8,60 @@ export function getTimezoneOffset(date: Date): string {
     const minutes = String(Math.abs(offset) % 60).padStart(2, '0');
     return `${sign}${hours}:${minutes}`;
 }
+
+/**
+ * Converts SVG data to a Data URI for use in CSS
+ * @param svgData The raw SVG markup
+ * @returns A data URI string that can be used in CSS
+ */
+export function svgToDataUri(svgData: string): string {
+    try {
+        // Remove any newlines and extra spaces
+        let cleanedSvg = svgData.replace(/\s+/g, ' ').trim();
+
+        // Handle SVGs from common sites that wrap content in groups
+        if (cleanedSvg.includes('SVGRepo')) {
+            // Extract the actual icon content from SVGRepo's wrapper groups
+            const iconCarrierMatch = cleanedSvg.match(/<g id="SVGRepo_iconCarrier">(.*?)<\/g>/);
+            if (iconCarrierMatch) {
+                cleanedSvg = iconCarrierMatch[1].trim();
+                // Wrap back in svg tag with necessary attributes
+                cleanedSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${cleanedSvg}</svg>`;
+            }
+        }
+
+        // Replace specific fill colors with currentColor for theme compatibility
+        cleanedSvg = cleanedSvg
+            .replace(/fill="#[0-9A-Fa-f]{3,6}"/g, 'fill="currentColor"')
+            .replace(/fill="black"/g, 'fill="currentColor"')
+            .replace(/fill="none"/g, '')
+            .replace(/fill="white"/g, 'fill="currentColor"');
+
+        // URI encode the SVG
+        const encodedSvg = encodeURIComponent(cleanedSvg)
+            .replace(/'/g, '%27')
+            .replace(/"/g, '%22');
+
+        // Create the data URI
+        return `data:image/svg+xml,${encodedSvg}`;
+    } catch (error) {
+        console.error('SVG processing error:', error, '\nOriginal SVG:', svgData);
+        throw error;
+    }
+}
+
+/**
+ * Checks if a string is an emoji using a more comprehensive detection method
+ * @param str The string to check
+ * @returns boolean indicating if the string is an emoji
+ */
+export function isEmoji(str: string): boolean {
+    const trimmed = str.trim();
+    // This regex pattern matches most emoji sequences, including:
+    // - Single unicode emojis
+    // - Emoji with modifiers (skin tones)
+    // - Emoji with variation selectors
+    // - Emoji ZWJ sequences
+    const emojiPattern = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F))*$/u;
+    return emojiPattern.test(trimmed);
+}

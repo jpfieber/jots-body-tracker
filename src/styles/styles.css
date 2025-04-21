@@ -5,6 +5,7 @@
 
 .settings-indent {
     margin-left: 24px !important;
+    padding-left: 2em;
 }
 
 .settings-separator {
@@ -127,6 +128,19 @@
     margin: 4px 0;
 }
 
+.body-measurement-entry::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
 /* Hide the original task marker */
 .body-measurement-entry .task-list-item-checkbox {
     display: none;
@@ -139,4 +153,12 @@
 
 .markdown-preview-view ul>li.task-list-item input.task-list-item-checkbox {
     display: none !important;
+}
+
+/* Task SVG Icon textarea */
+.settings-indent textarea[placeholder*="svg xmlns"] {
+    height: 60px;
+    min-height: 60px;
+    font-family: var(--font-monospace);
+    font-size: 12px;
 }

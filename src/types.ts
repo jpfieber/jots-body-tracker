@@ -30,6 +30,7 @@ export interface Settings {
     journalEntryTemplate: string;
     stringPrefixLetter: string;
     decoratedTaskSymbol: string;
+    taskSvgIcon: string;
     dailyNoteTemplate?: string;
 
     // Measurement file settings
@@ -38,6 +39,12 @@ export interface Settings {
     measurementFileTemplate?: string;
     measurementEntryTemplate: string;
     measurementFileNameFormat: string;
+
+    // Body Note settings
+    enableBodyNotes: boolean;
+    bodyNotesFolder: string;
+    bodyNoteTemplate?: string;
+    bodyNoteEntryTemplate: string;
 
     // User settings
     users: User[];
@@ -60,12 +67,14 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
     enableJournalEntry: true,
+    enableJournalEntryCallout: false,
     journalFolder: 'Journal',
     journalSubDirectory: 'YYYY/YYYY-MM',
     journalNameFormat: 'YYYY-MM-DD_DDD',
     journalEntryTemplate: '<measured>: <measure> <unit>',
     stringPrefixLetter: 'b',
-    decoratedTaskSymbol: '⚡️', // Default icon for measurement tasks
+    decoratedTaskSymbol: '⚡️',
+    taskSvgIcon: '⚡️', // Ensure there's a default icon
 
     enableMeasurementFiles: true,
     measurementFolder: 'Measurements',

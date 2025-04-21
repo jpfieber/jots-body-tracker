@@ -15,67 +15,95 @@ export class MeasurementModal extends Modal {
         contentEl.empty();
 
         // Title
-        contentEl.createEl('h2', { text: 'Body Measurements' });
+        contentEl.createEl('h2', { text: 'Record Body Measurements' });
 
         // Date picker
         new Setting(contentEl)
             .setName('Date')
             .addText(text => {
-                text.inputEl.type = 'date';
-                // Set today's date in YYYY-MM-DD format
+                text.inputEl.type = 'datetime-local';
                 const moment = (window as any).moment;
-                const today = moment().format('YYYY-MM-DD');
-                text.setValue(today);
+                const now = moment().format('YYYY-MM-DDTHH:mm');
+                text.setValue(now);
                 return text;
             });
 
-        // User dropdown
-        const userContainer = new Setting(contentEl)
-            .setName('User')
-            .addDropdown(dropdown => {
-                this.settings.users.forEach(user => {
-                    dropdown.addOption(user.id, user.name);
+        // User dropdown if multiple users exist
+        if (this.settings.users.length > 0) {
+            const userContainer = new Setting(contentEl)
+                .setName('User')
+                .addDropdown(dropdown => {
+                    this.settings.users.forEach(user => {
+                        dropdown.addOption(user.id, user.name);
+                    });
+                    if (this.settings.defaultUser) {
+                        dropdown.setValue(this.settings.defaultUser);
+                    } else if (this.settings.users.length > 0) {
+                        dropdown.setValue(this.settings.users[0].id);
+                    }
                 });
-                if (this.settings.defaultUser) {
-                    dropdown.setValue(this.settings.defaultUser);
-                }
-            });
+        }
 
-        // Measurements
+        // Create container for measurements
         const measurementsContainer = contentEl.createDiv();
         measurementsContainer.addClass('measurements-container');
 
         // Group measurements by type
-        this.settings.measurements.forEach(measurement => {
-            const units = this.plugin.getUnitForMeasurement(measurement.type);
-            const currentUnit = this.settings.measurementSystem === 'metric' ? units.metric : units.imperial;
+        const measurementsByType: { [key: string]: Measurement[] } = {};
+        this.settings.measurements.forEach(m => {
+            if (!measurementsByType[m.type]) {
+                measurementsByType[m.type] = [];
+            }
+            measurementsByType[m.type].push(m);
+        });
 
-            new Setting(measurementsContainer)
-                .setName(`${measurement.name} (${currentUnit})`)
-                .addText(text => {
-                    text.inputEl.type = 'number';
-                    text.inputEl.step = '0.1';
-                    text.setPlaceholder(`Enter ${measurement.name.toLowerCase()}`);
-                    text.onChange(value => {
-                        if (value) {
-                            this.measurementValues[measurement.name] = value;
-                        } else {
-                            delete this.measurementValues[measurement.name];
-                        }
+        // Add measurements grouped by type
+        Object.entries(measurementsByType).forEach(([type, measurements]) => {
+            const typeHeading = measurementsContainer.createEl('h3', {
+                text: type.charAt(0).toUpperCase() + type.slice(1) + ' Measurements'
+            });
+            typeHeading.style.marginTop = '1em';
+            typeHeading.style.marginBottom = '0.5em';
+
+            measurements.forEach(measurement => {
+                const units = this.plugin.getUnitForMeasurement(measurement.type);
+                const currentUnit = this.settings.measurementSystem === 'metric' ? units.metric : units.imperial;
+
+                new Setting(measurementsContainer)
+                    .setName(measurement.name)
+                    .setDesc(`Enter value in ${currentUnit}`)
+                    .addText(text => {
+                        text.inputEl.type = 'number';
+                        text.inputEl.step = '0.1';
+                        text.setPlaceholder(`${measurement.name} (${currentUnit})`);
+                        text.onChange(value => {
+                            if (value) {
+                                this.measurementValues[measurement.name] = value;
+                            } else {
+                                delete this.measurementValues[measurement.name];
+                            }
+                        });
+                        return text;
                     });
-                    return text;
-                });
+            });
         });
 
         // Submit button
         new Setting(contentEl)
             .addButton(btn => btn
-                .setButtonText('Submit')
+                .setButtonText('Save Measurements')
                 .setCta()
                 .onClick(() => {
-                    const dateStr = (contentEl.querySelector('input[type="date"]') as HTMLInputElement).value;
-                    const userId = (contentEl.querySelector('.dropdown') as HTMLSelectElement).value;
-                    this.handleSubmit(dateStr, userId, this.measurementValues);
+                    const dateInput = contentEl.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+                    const userSelect = contentEl.querySelector('.dropdown') as HTMLSelectElement;
+                    const userId = userSelect ? userSelect.value : (this.settings.defaultUser || this.settings.users[0]?.id || '');
+
+                    if (Object.keys(this.measurementValues).length === 0) {
+                        // No measurements entered
+                        return;
+                    }
+
+                    this.handleSubmit(dateInput.value, userId, this.measurementValues);
                     this.close();
                 }));
     }
@@ -87,12 +115,9 @@ export class MeasurementModal extends Modal {
     }
 
     private handleSubmit(dateStr: string, userId: string, measurements: { [key: string]: string }) {
-        // Create the measurement record with the current time
-        const moment = (window as any).moment;
-        const currentTime = moment().format('HH:mm');
         const measurementData: MeasurementRecord = {
-            date: `${dateStr} ${currentTime}`,  // Include both date and time
-            userId,
+            date: dateStr,
+            userId
         };
 
         // Add each measurement with its value
@@ -102,7 +127,7 @@ export class MeasurementModal extends Modal {
             }
         });
 
-        // Call the plugin's saveMeasurement method
+        // Save measurements
         this.plugin.saveMeasurement(measurementData);
     }
 }

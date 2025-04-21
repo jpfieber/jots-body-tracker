@@ -10,54 +10,41 @@ import { MeasurementType, Settings, DEFAULT_SETTINGS, MeasurementRecord } from '
 export default class BodyTrackerPlugin extends Plugin {
     settings!: Settings;
     measurementService!: MeasurementService;
+    journalService!: JournalService;
     styleManager!: StyleManager;
     googleFitService?: GoogleFitService;
     googleFitSyncInterval?: number;
 
     async onload() {
         await this.loadSettings();
+
+        // Initialize services
         this.measurementService = new MeasurementService(this.app, this.settings);
-
-        // Initialize style manager and apply styles
+        this.journalService = new JournalService(this.app, this.settings);
         this.styleManager = new StyleManager();
+        // Set initial icon from settings
+        this.styleManager.setCustomIcon(this.settings.taskSvgIcon || '');
         this.styleManager.updateStyles(this.settings);
+        await this.setupGoogleFitService();
 
-        // Add settings tab first so it's available for updates
-        const settingsTab = new BodyTrackerSettingsTab(this.app, this);
-        this.addSettingTab(settingsTab);
+        // Add settings tab
+        this.addSettingTab(new BodyTrackerSettingsTab(this.app, this));
 
-        // Initialize Google Fit service and setup sync if enabled
-        if (this.settings.enableGoogleFit) {
-            await this.setupGoogleFitService();
-
-            // If we have a refresh token, try to restore the connection
-            if (this.settings.googleRefreshToken) {
-                try {
-                    // First ensure the service is initialized
-                    if (!this.googleFitService) {
-                        await this.setupGoogleFitService();
-                    }
-
-                    // Try to refresh the token
-                    await this.googleFitService?.refreshTokenIfNeeded().catch(error => {
-                        console.error('Failed to refresh Google Fit token on load:', error);
-                        // Don't clear tokens here, let the service handle retries
-                    });
-
-                    // Only set up sync if we have a valid access token after refresh
-                    if (this.settings.googleAccessToken) {
-                        this.setupGoogleFitSync();
-                    }
-
-                    // Force refresh the settings tab to show current connection state
-                    settingsTab.display();
-                } catch (error) {
-                    console.error('Failed to initialize Google Fit service:', error);
-                }
+        // Add command to record measurements
+        this.addCommand({
+            id: 'record-measurements',
+            name: 'Record Body Measurements',
+            callback: () => {
+                const modal = new MeasurementModal(this.app, this);
+                modal.open();
             }
-        }
+        });
 
+        // Add command to sync with Google Fit
         this.addCommands();
+
+        // Setup automatic Google Fit sync if enabled
+        this.setupGoogleFitSync();
     }
 
     onunload() {
@@ -106,15 +93,10 @@ export default class BodyTrackerPlugin extends Plugin {
     }
 
     async saveSettings() {
-        console.log('Saving settings:', {
-            hasAccessToken: !!this.settings.googleAccessToken,
-            hasRefreshToken: !!this.settings.googleRefreshToken,
-            tokenExpiry: this.settings.googleTokenExpiry ? new Date(this.settings.googleTokenExpiry).toISOString() : undefined
-        });
-
         await this.saveData(this.settings);
 
         // Update styles whenever settings are saved
+        this.styleManager.setCustomIcon(this.settings.taskSvgIcon || '');
         this.styleManager.updateStyles(this.settings);
 
         // Force refresh ALL settings tabs to ensure connection status is updated
@@ -303,16 +285,28 @@ export default class BodyTrackerPlugin extends Plugin {
         }
     }
 
-    async saveMeasurement(data: MeasurementRecord) {
-        // Add to measurement files
-        if (this.settings.enableMeasurementFiles) {
-            await this.measurementService.updateMeasurementFiles(data);
-        }
+    async saveMeasurement(data: MeasurementRecord): Promise<void> {
+        try {
+            // Add to daily journal if enabled
+            if (this.settings.enableJournalEntry) {
+                await this.journalService.appendToJournal(data);
+            }
 
-        // Add to journal entry
-        if (this.settings.enableJournalEntry) {
-            const journalService = new JournalService(this.app, this.settings);
-            await journalService.appendToJournal(data);
+            // Add to individual body notes if enabled
+            if (this.settings.enableBodyNotes) {
+                for (const measurement of this.settings.measurements) {
+                    if (data[measurement.name] !== undefined) {
+                        await this.journalService.appendToBodyNote(data, measurement.name);
+                    }
+                }
+            }
+
+            // Update any UI elements that show the current measurement state
+            this.refreshSettingsTab();
+
+        } catch (error) {
+            console.error('Failed to save measurement:', error);
+            new Notice('Failed to save measurement. Please try again.');
         }
     }
 

@@ -1,4 +1,5 @@
 export const DEFAULT_SETTINGS = {
+    // Journal settings
     enableJournalEntry: true,
     enableJournalEntryCallout: false,
     journalFolder: 'Journal',
@@ -8,14 +9,56 @@ export const DEFAULT_SETTINGS = {
     stringPrefixLetter: 'b',
     decoratedTaskSymbol: '⚡️',
 
+    // Measurement file settings
     enableMeasurementFiles: true,
     measurementFolder: 'Measurements',
+    measurementFileTemplate: '',
     measurementEntryTemplate: '| <date> | <user> | <measure> <unit> |',
     measurementFileNameFormat: '<measure>',
 
+    // Body Notes settings
+    enableBodyNotes: false,
+    bodyNotesFolder: 'Body',
+    bodyNoteTemplate: '',
+    bodyNoteEntryTemplate: '| <date> | <user> | <measure> <unit> |',
+    taskSvgIcon: '⚡️',
+
+    // User settings
     users: [],
+    defaultUser: undefined,
     measurementSystem: 'metric',
-    measurements: [],
+    measurements: [
+        {
+            name: 'Weight',
+            type: 'weight',
+            unit: 'kg'
+        },
+        {
+            name: 'Body Fat',
+            type: 'weight',
+            unit: 'kg'
+        },
+        {
+            name: 'Height',
+            type: 'length',
+            unit: 'cm'
+        },
+        {
+            name: 'Chest',
+            type: 'length',
+            unit: 'cm'
+        },
+        {
+            name: 'Waist',
+            type: 'length',
+            unit: 'cm'
+        },
+        {
+            name: 'Hips',
+            type: 'length',
+            unit: 'cm'
+        }
+    ],
 
     // Google Fit defaults
     enableGoogleFit: false,

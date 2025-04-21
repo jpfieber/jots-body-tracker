@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, setIcon, SearchComponent } from 'obsidian';
+import { App, PluginSettingTab, Setting, setIcon, SearchComponent, Notice } from 'obsidian';
 import { Settings, User, Measurement, MeasurementUnit } from './types';
 import { FolderSuggest } from './foldersuggester';
 import { FileSuggest } from './filesuggester';
@@ -229,6 +229,18 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                     }));
 
             new Setting(containerEl)
+                .setName('Task SVG Icon')
+                .setDesc('Enter either a single emoji (e.g. ⚡️) or raw SVG markup for the icon to use for measurement entries.')
+                .setClass('settings-indent')
+                .addTextArea(text => text
+                    .setPlaceholder('⚡️ or <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="..."/></svg>')
+                    .setValue(this.plugin.settings.taskSvgIcon || '')
+                    .onChange(async (value) => {
+                        this.plugin.settings.taskSvgIcon = value;
+                        await this.plugin.saveSettings();
+                    }));
+
+            new Setting(containerEl)
                 .setName('In Callout')
                 .setDesc('Place entries in a callout block')
                 .setClass('settings-indent')
@@ -236,6 +248,62 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.enableJournalEntryCallout ?? false)
                     .onChange(async (value) => {
                         this.plugin.settings.enableJournalEntryCallout = value;
+                        await this.plugin.saveSettings();
+                    }));
+        }
+
+        // Body Notes Settings
+        containerEl.createEl('h3', { text: 'Body Notes' });
+
+        new Setting(containerEl)
+            .setName('Enable Body Notes')
+            .setDesc('Add measurements to individual tracking notes for each measurement type')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableBodyNotes ?? false)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableBodyNotes = value;
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
+
+        if (this.plugin.settings.enableBodyNotes) {
+            new Setting(containerEl)
+                .setName('Body Notes Folder')
+                .setDesc('Folder where your body measurement tracking notes will be stored')
+                .setClass('settings-indent')
+                .addSearch((cb) => {
+                    new FolderSuggest(this.app, cb.inputEl);
+                    cb.setPlaceholder("Body")
+                        .setValue(this.plugin.settings.bodyNotesFolder || '')
+                        .onChange(async (value) => {
+                            this.plugin.settings.bodyNotesFolder = value;
+                            await this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('Note Template')
+                .setDesc('Template file to use when creating new body measurement notes (.md files only)')
+                .setClass('settings-indent')
+                .addSearch((cb) => {
+                    new FileSuggest(this.app, cb.inputEl);
+                    cb.setPlaceholder("templates/body-note.md")
+                        .setValue(this.plugin.settings.bodyNoteTemplate || '')
+                        .onChange((new_path) => {
+                            this.plugin.settings.bodyNoteTemplate = new_path;
+                            this.plugin.saveSettings();
+                        });
+                });
+
+            new Setting(containerEl)
+                .setName('Entry Format')
+                .setDesc('Template for entries in body measurement notes. Use <date>, <user>, <measure>, and <unit> as placeholders')
+                .setClass('settings-indent')
+                .addText(text => text
+                    .setPlaceholder('| <date> | <user> | <measure> <unit> |')
+                    .setValue(this.plugin.settings.bodyNoteEntryTemplate || '')
+                    .onChange(async (value) => {
+                        this.plugin.settings.bodyNoteEntryTemplate = value;
                         await this.plugin.saveSettings();
                     }));
         }
