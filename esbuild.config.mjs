@@ -2,6 +2,7 @@ import esbuild from "esbuild";
 import process from "process";
 import fs from "fs/promises";
 import { watch } from "fs";
+import path from "path";
 
 const banner =
     `/*
@@ -12,10 +13,23 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = (process.argv[2] === 'production');
 
+// Function to ensure directory exists
+async function ensureDir(dir) {
+    try {
+        await fs.access(dir);
+    } catch {
+        await fs.mkdir(dir, { recursive: true });
+    }
+}
+
 // Function to copy styles to dist
 async function copyStyles() {
     try {
-        await fs.copyFile('src/styles/styles.css', 'dist/styles.css');
+        // Ensure assets directory exists
+        await ensureDir('dist/assets');
+        
+        // Copy styles to assets directory
+        await fs.copyFile('src/styles/styles.css', 'dist/assets/styles.css');
         console.log('CSS file copied successfully');
     } catch (err) {
         console.error('Error copying CSS file:', err);
@@ -42,24 +56,21 @@ if (process.argv[2] === '--watch') {
     buildOptions.watch = {
         onRebuild(error, result) {
             if (error) console.error('watch build failed:', error);
-            else console.log('watch build succeeded');
+            else {
+                console.log('watch build succeeded');
+                copyStyles();
+            }
         },
     };
 
     // Build with watch mode
     esbuild.build(buildOptions).then(result => {
+        copyStyles();
         console.log('watching...');
-
-        // Watch the CSS file
-        watch('src/styles', async (eventType, filename) => {
-            if (filename === 'styles.css') {
-                await copyStyles();
-                console.log('CSS updated');
-            }
-        });
     });
 } else {
-    // Single build
-    await esbuild.build(buildOptions);
-    await copyStyles();
+    // Build once
+    esbuild.build(buildOptions).then(() => {
+        copyStyles();
+    });
 }

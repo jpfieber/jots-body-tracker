@@ -1,6 +1,6 @@
 {
   "name": "jots-body-tracker",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Track body measurements with Google Fit and Withings integration in Obsidian",
   "main": "main.js",
   "scripts": {

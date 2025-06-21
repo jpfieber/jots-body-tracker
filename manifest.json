@@ -1,7 +1,7 @@
 {
   "id": "body-tracker",
   "name": "Body Tracker",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": "Your Name",
   "description": "Track body measurements with Google Fit integration",
   "main": "main.js",
