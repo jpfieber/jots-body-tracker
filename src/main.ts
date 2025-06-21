@@ -16,6 +16,7 @@ export default class BodyTrackerPlugin extends Plugin {
     googleFitSyncInterval?: number;
 
     async onload() {
+        console.log('Body Tracker: Loading Plugin');
         await this.loadSettings();
 
         // Initialize services
@@ -48,6 +49,7 @@ export default class BodyTrackerPlugin extends Plugin {
     }
 
     onunload() {
+        console.log('Body Tracker: Unloading Plugin');
         // Clean up style manager
         this.styleManager.removeStyles();
 
@@ -104,13 +106,11 @@ export default class BodyTrackerPlugin extends Plugin {
         if (settingsLeaf) {
             const settingsTab = settingsLeaf.view;
             const activeTabId = (settingsTab as any)?.currentTab?.id;
-            console.log('Current settings tab:', activeTabId);
 
             // If we're on our tab, force an immediate refresh
             if (activeTabId === 'body-tracker') {
                 const tab = (settingsTab as any)?.tabContentContainer?.children?.['body-tracker'];
                 if (tab) {
-                    console.log('Refreshing body-tracker settings tab');
                     tab.display();
                 }
             }
@@ -125,15 +125,7 @@ export default class BodyTrackerPlugin extends Plugin {
 
     setupGoogleFitService() {
         if (this.settings.enableGoogleFit) {
-            console.log('Setting up Google Fit service:', {
-                hasClientId: !!this.settings.googleClientId,
-                hasClientSecret: !!this.settings.googleClientSecret,
-                hasAccessToken: !!this.settings.googleAccessToken,
-                hasRefreshToken: !!this.settings.googleRefreshToken
-            });
-
             if (!this.settings.googleClientId || !this.settings.googleClientSecret) {
-                console.error('Google Fit service not initialized: Missing client credentials');
                 new Notice('Please enter your Google Fit API credentials in the settings');
                 return;
             }
@@ -147,12 +139,6 @@ export default class BodyTrackerPlugin extends Plugin {
                     'https://www.googleapis.com/auth/fitness.body.write'
                 ],
                 onSettingsChange: async (settings) => {
-                    console.log('Google Fit service requesting settings update:', {
-                        hasAccessToken: !!settings.googleAccessToken,
-                        hasRefreshToken: !!settings.googleRefreshToken,
-                        tokenExpiry: settings.googleTokenExpiry ? new Date(settings.googleTokenExpiry).toISOString() : undefined
-                    });
-
                     // Update our settings
                     this.settings = settings;
 
@@ -165,8 +151,6 @@ export default class BodyTrackerPlugin extends Plugin {
                         const settingsTab = settingsLeaf.view;
                         const tab = (settingsTab as any)?.tabContentContainer?.children?.['body-tracker'];
                         if (tab) {
-                            console.log('Force refreshing body-tracker settings tab');
-                            // Force a complete refresh of the tab
                             requestAnimationFrame(() => {
                                 tab.display();
                             });
@@ -176,10 +160,8 @@ export default class BodyTrackerPlugin extends Plugin {
                 app: this.app
             });
 
-            console.log('Google Fit service initialized');
             this.setupGoogleFitSync();
         } else {
-            console.log('Disabling Google Fit service');
             this.googleFitService = undefined;
             if (this.googleFitSyncInterval) {
                 window.clearInterval(this.googleFitSyncInterval);
@@ -206,39 +188,24 @@ export default class BodyTrackerPlugin extends Plugin {
 
     async syncGoogleFit() {
         if (!this.googleFitService || !this.settings.googleAccessToken) {
-            console.log('GoogleFit Sync: Skipping sync - service or access token not available');
             return;
         }
 
         try {
             // Get measurements from the last 7 days relative to current time
-            const now = Math.floor(new Date().getTime() / 1000); // Current time in Unix timestamp
+            const now = Math.floor(new Date().getTime() / 1000);
             const sevenDaysAgo = now - (7 * 24 * 60 * 60);
 
-            console.log('GoogleFit Sync: Fetching measurements for date range:', {
-                start: new Date(sevenDaysAgo * 1000).toISOString(),
-                end: new Date(now * 1000).toISOString()
-            });
-
             const measurements = await this.googleFitService.getMeasurements(sevenDaysAgo, now);
-            console.log('GoogleFit Sync: Got measurements from service:', measurements);
 
             // Process each measurement
             for (const measurement of measurements) {
-                // Convert Unix timestamp to date-time string
                 const moment = (window as any).moment;
                 const measurementDate = moment(measurement.date * 1000);
                 const record: MeasurementRecord = {
                     date: measurementDate.format('YYYY-MM-DD HH:mm'),
                     userId: this.settings.defaultUser || this.settings.users[0]?.id || ''
                 };
-
-                console.log('GoogleFit Sync: Processing measurement for date:', {
-                    date: record.date,
-                    userId: record.userId,
-                    weight: measurement.weight,
-                    bodyFat: measurement.bodyFat
-                });
 
                 // Add weight measurement if available
                 if (measurement.weight) {
@@ -247,27 +214,14 @@ export default class BodyTrackerPlugin extends Plugin {
                         ? measurement.weight * 2.20462  // Convert kg to lbs
                         : measurement.weight;
 
-                    const formattedWeight = weight.toFixed(1);
-                    record['Weight'] = formattedWeight;
-
-                    console.log('GoogleFit Sync: Processed weight:', {
-                        originalWeight: measurement.weight,
-                        convertedWeight: weight,
-                        system: this.settings.measurementSystem,
-                        formatted: formattedWeight
-                    });
+                    record['Weight'] = weight.toFixed(1);
                 }
 
                 if (measurement.bodyFat) {
                     record['Body Fat'] = measurement.bodyFat.toFixed(1);
-                    console.log('GoogleFit Sync: Processed body fat:', {
-                        bodyFat: measurement.bodyFat,
-                        formatted: record['Body Fat']
-                    });
                 }
 
                 // Save the measurements
-                console.log('GoogleFit Sync: Saving measurement record:', record);
                 if (this.settings.enableMeasurementFiles) {
                     await this.measurementService.updateMeasurementFiles(record);
                 }
@@ -279,7 +233,6 @@ export default class BodyTrackerPlugin extends Plugin {
 
             new Notice('Successfully synced measurements from Google Fit');
         } catch (error) {
-            console.error('Failed to sync with Google Fit:', error);
             new Notice('Failed to sync with Google Fit. Check the console for details.');
             throw error;
         }
@@ -315,14 +268,37 @@ export default class BodyTrackerPlugin extends Plugin {
             id: 'sync-google-fit',
             name: 'Sync Google Fit Measurements',
             checkCallback: (checking: boolean): boolean => {
-                const canRun: boolean = !!(this.settings.enableGoogleFit
+                const canRun: boolean = !!(
+                    this.settings.enableGoogleFit
                     && this.settings.googleAccessToken
-                    && this.googleFitService);
+                    && this.googleFitService
+                );
 
                 if (checking) return canRun;
 
                 if (canRun) {
                     this.syncGoogleFit();
+                }
+
+                return canRun;
+            }
+        });
+
+        this.addCommand({
+            id: 'connect-google-fit',
+            name: 'Connect Google Fit Account',
+            checkCallback: (checking: boolean): boolean => {
+                const canRun: boolean = !!(
+                    this.settings.enableGoogleFit
+                    && this.settings.googleClientId
+                    && this.settings.googleClientSecret
+                    && !this.settings.googleAccessToken
+                );
+
+                if (checking) return canRun;
+
+                if (canRun) {
+                    this.googleFitService?.authenticate();
                 }
 
                 return canRun;
@@ -337,7 +313,6 @@ export default class BodyTrackerPlugin extends Plugin {
             const settingsTab = settingsLeaf.view;
             const tab = (settingsTab as any)?.tabContentContainer?.children?.['body-tracker'];
             if (tab) {
-                console.log('Force refreshing body-tracker settings tab');
                 setTimeout(() => tab.display(), 50); // Small delay to ensure settings are saved
             }
         }

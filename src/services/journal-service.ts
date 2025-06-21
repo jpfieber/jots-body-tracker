@@ -42,13 +42,9 @@ export class JournalService {
         const journalPath = this.getJournalPath(dateTime);
         await this.createJournalPath(journalPath);
 
-        console.log('Journal: Writing to journal path:', journalPath);
-
         // Get journal file name for the date, using local date components
         const fileName = dateTime.format(this.settings.journalNameFormat) + '.md';
         const filePath = `${journalPath}/${fileName}`;
-
-        console.log('Journal: Target journal file:', filePath);
 
         // Create entries for each measurement
         for (const measurement of this.settings.measurements) {
@@ -70,13 +66,6 @@ export class JournalService {
                 if (this.settings.enableJournalEntryCallout) {
                     entry = `> ${entry}`;
                 }
-
-                console.log('Journal: Creating entry:', {
-                    measurement: measurement.name,
-                    value,
-                    unit,
-                    entry
-                });
 
                 // Append to journal file
                 let fileContent = '';
@@ -100,8 +89,10 @@ export class JournalService {
 
                     if (existingFile instanceof TFile) {
                         await this.app.vault.modify(existingFile, fileContent);
+                        new Notice(`Added ${measurement.name} to journal`);
                     } else {
                         await this.app.vault.create(filePath, fileContent);
+                        new Notice(`Created journal with ${measurement.name}`);
                     }
                 }
             }
@@ -138,6 +129,7 @@ export class JournalService {
                     : `# ${measurement} Tracking\n\n| Date | Time | User | Measurement |\n|------|------|------|-------------|\n`;
 
                 file = await this.app.vault.create(notePath, initialContent);
+                new Notice(`Created ${measurement} note`);
             }
 
             // Ensure file is ready
@@ -170,8 +162,7 @@ export class JournalService {
             }
 
         } catch (error) {
-            console.error('Failed to update body note:', error);
-            new Notice(`Failed to update ${measurement} note. Please try again.`);
+            new Notice(`Failed to update ${measurement} note`);
             throw error;
         }
     }

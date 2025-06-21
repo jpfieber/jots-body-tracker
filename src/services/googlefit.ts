@@ -62,7 +62,6 @@ export class GoogleFitService {
 
     async authenticate(): Promise<boolean> {
         const state = Math.random().toString(36).substring(7);
-        console.log('Starting OAuth flow with state:', state);
 
         // Save auth state and wait for it to persist
         this.settings.googleAuthState = state;
@@ -79,27 +78,22 @@ export class GoogleFitService {
         });
 
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-        console.log('Opening auth URL:', authUrl);
 
         // Ensure server is running before opening URL
         await this.oauthServer.close().catch(() => { }); // Close any existing server
         await this.oauthServer.start();
-        console.log('OAuth server started');
 
         try {
             // Open auth URL in default browser
             window.open(authUrl);
 
-            console.log('Waiting for OAuth callback...');
             const { code, state: returnedState } = await this.oauthServer.waitForCallback();
-            console.log('Received OAuth callback:', { hasCode: !!code, returnedState });
 
             if (!code || !returnedState) {
                 throw new Error('Authentication failed - no code or state received');
             }
 
             // Complete authentication with received code
-            console.log('Starting token exchange...');
             await this.completeAuthentication(code, returnedState);
 
             // Wait a moment for settings to be saved and UI to update
@@ -112,14 +106,12 @@ export class GoogleFitService {
 
             return true;
         } catch (error) {
-            console.error('Authentication failed:', error);
             new Notice('Authentication failed. Please try again.');
             return false;
         } finally {
             // Only close the server after everything is done
             try {
                 await this.oauthServer.close();
-                console.log('OAuth server closed');
             } catch (e) {
                 console.error('Error closing OAuth server:', e);
             }
@@ -127,23 +119,11 @@ export class GoogleFitService {
     }
 
     async completeAuthentication(code: string, state: string): Promise<void> {
-        console.log('Completing authentication...', {
-            hasCode: !!code,
-            state,
-            expectedState: this.settings.googleAuthState,
-            matches: state === this.settings.googleAuthState
-        });
-
         if (state !== this.settings.googleAuthState) {
-            console.error('State mismatch:', {
-                received: state,
-                expected: this.settings.googleAuthState
-            });
             throw new Error('Invalid authentication state');
         }
 
         try {
-            console.log('Exchanging code for tokens...');
             const response = await request({
                 url: 'https://oauth2.googleapis.com/token',
                 method: 'POST',
@@ -159,7 +139,6 @@ export class GoogleFitService {
                 }).toString()
             });
 
-            console.log('Received token response');
             const tokens = JSON.parse(response);
             if (!tokens.access_token || !tokens.refresh_token) {
                 throw new Error('Invalid token response - missing required tokens');
@@ -169,12 +148,6 @@ export class GoogleFitService {
             this.settings.googleAccessToken = tokens.access_token;
             this.settings.googleRefreshToken = tokens.refresh_token;
             this.settings.googleTokenExpiry = Date.now() + (tokens.expires_in * 1000);
-
-            console.log('Saving tokens...', {
-                hasAccessToken: !!this.settings.googleAccessToken,
-                hasRefreshToken: !!this.settings.googleRefreshToken,
-                tokenExpiry: new Date(this.settings.googleTokenExpiry || 0).toISOString()
-            });
 
             // Save settings and wait for callback to complete
             await this.onSettingsChange(this.settings);
@@ -190,7 +163,6 @@ export class GoogleFitService {
 
             new Notice('Successfully connected to Google Fit');
         } catch (error) {
-            console.error('Token exchange failed:', error);
             // Clear any partial token state on failure
             this.settings.googleAccessToken = '';
             this.settings.googleRefreshToken = '';
@@ -234,8 +206,6 @@ export class GoogleFitService {
             }
 
             if (!response.ok) {
-                console.error('Failed to refresh token:', { status: response.status, data: errorData });
-
                 // Only clear tokens for specific OAuth errors that indicate the refresh token is invalid
                 if (response.status === 400 || response.status === 401) {
                     const errorMessage = (errorData as any).error;
@@ -267,7 +237,6 @@ export class GoogleFitService {
             }
             await this.onSettingsChange(this.settings);
         } catch (error) {
-            console.error('Failed to refresh access token:', error);
             // Only clear tokens and rethrow for specific OAuth errors
             if (error instanceof Error && error.message.includes('please reconnect')) {
                 throw error;
@@ -319,7 +288,6 @@ export class GoogleFitService {
 
                     // For other errors (network, etc.), retry after a delay if we have retries left
                     if (retryCount > 0) {
-                        console.log(`Token refresh attempt failed, retrying in 1s... (${retryCount} retries left)`);
                         await new Promise(resolve => setTimeout(resolve, 1000));
                     }
                 }
@@ -341,13 +309,6 @@ export class GoogleFitService {
             const startTimeNs = startTime * 1000000000;
             const endTimeNs = endTime * 1000000000;
 
-            console.log('GoogleFit: Querying for time range:', {
-                start: new Date(startTime * 1000).toISOString(),
-                end: new Date(endTime * 1000).toISOString(),
-                startTimeNs,
-                endTimeNs
-            });
-
             // Get weight data
             const weightResponse = await request({
                 url: `https://www.googleapis.com/fitness/v1/users/me/dataSources/derived:com.google.weight:com.google.android.gms:merge_weight/datasets/${startTimeNs}-${endTimeNs}`,
@@ -358,29 +319,19 @@ export class GoogleFitService {
                 }
             });
 
-            console.log('GoogleFit: Raw weight response:', weightResponse);
             const weightData = JSON.parse(weightResponse);
-            console.log('GoogleFit: Parsed weight data:', weightData);
             const measurements: GoogleFitMeasurement[] = [];
 
             // Process weight data
             if (weightData.point && weightData.point.length > 0) {
-                console.log('GoogleFit: Found weight data points:', weightData.point.length);
                 for (const point of weightData.point) {
                     const timestamp = Math.floor(parseInt(point.startTimeNanos) / 1000000000);
                     const measurement = {
                         date: timestamp,
                         weight: point.value[0].fpVal
                     };
-                    console.log('GoogleFit: Processing weight measurement:', {
-                        date: new Date(timestamp * 1000).toISOString(),
-                        weight: measurement.weight,
-                        source: point.originDataSourceId
-                    });
                     measurements.push(measurement);
                 }
-            } else {
-                console.log('GoogleFit: No weight data points found in the response');
             }
 
             // Get body fat data
@@ -393,52 +344,29 @@ export class GoogleFitService {
                 }
             });
 
-            console.log('GoogleFit: Raw body fat response:', bodyFatResponse);
             const bodyFatData = JSON.parse(bodyFatResponse);
-            console.log('GoogleFit: Parsed body fat data:', bodyFatData);
 
             // Process body fat data
             if (bodyFatData.point && bodyFatData.point.length > 0) {
-                console.log('GoogleFit: Found body fat data points:', bodyFatData.point.length);
                 for (const point of bodyFatData.point) {
                     const timestamp = Math.floor(parseInt(point.startTimeNanos) / 1000000000);
                     const measurement = measurements.find(m => m.date === timestamp);
 
                     if (measurement) {
                         measurement.bodyFat = point.value[0].fpVal;
-                        console.log('GoogleFit: Added body fat to existing measurement:', {
-                            date: new Date(timestamp * 1000).toISOString(),
-                            bodyFat: point.value[0].fpVal
-                        });
                     } else {
                         const newMeasurement = {
                             date: timestamp,
                             bodyFat: point.value[0].fpVal
                         };
-                        console.log('GoogleFit: Created new measurement for body fat:', {
-                            date: new Date(timestamp * 1000).toISOString(),
-                            bodyFat: point.value[0].fpVal
-                        });
                         measurements.push(newMeasurement);
                     }
                 }
-            } else {
-                console.log('GoogleFit: No body fat data points found in the response');
             }
 
-            console.log('GoogleFit: Final measurements:', measurements.map(m => ({
-                date: new Date(m.date * 1000).toISOString(),
-                weight: m.weight,
-                bodyFat: m.bodyFat
-            })));
             return measurements;
         } catch (error) {
-            console.error('GoogleFit: Failed to fetch measurements:', {
-                error,
-                message: error instanceof Error ? error.message : 'Unknown error',
-                response: (error as any).response,
-                stack: error instanceof Error ? error.stack : undefined
-            });
+            new Notice('Failed to fetch measurements from Google Fit');
             throw error;
         }
     }
@@ -496,7 +424,7 @@ export class GoogleFitService {
 
             new Notice('Measurements added to Google Fit');
         } catch (error) {
-            console.error('Failed to add Google Fit measurement:', error);
+            new Notice('Failed to add measurements to Google Fit');
             throw error;
         }
     }

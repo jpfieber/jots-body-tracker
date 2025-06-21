@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, Notice } from 'obsidian';
 import type { Settings, MeasurementRecord } from '../types';
 
 export class MeasurementService {
@@ -23,9 +23,6 @@ ${chartData.join('\n')}
         // Create the measurements folder if it doesn't exist
         await this.app.vault.createFolder(this.settings.measurementFolder).catch(() => { });
 
-        console.log('MeasurementService: Writing to measurement folder:', this.settings.measurementFolder);
-        console.log('MeasurementService: Processing record:', data);
-
         // Update each measurement file
         for (const measurement of this.settings.measurements) {
             const value = data[measurement.name];
@@ -39,23 +36,10 @@ ${chartData.join('\n')}
 
                 const filePath = `${this.settings.measurementFolder}/${fileName}.md`;
 
-                console.log('MeasurementService: Processing measurement:', {
-                    name: measurement.name,
-                    type: measurement.type,
-                    value,
-                    filePath
-                });
-
                 // Get the appropriate unit based on measurement type and system
                 const unit = measurement.type === 'weight'
                     ? (this.settings.measurementSystem === 'metric' ? 'kg' : 'lbs')
                     : (this.settings.measurementSystem === 'metric' ? 'cm' : 'in');
-
-                console.log('MeasurementService: Using unit:', {
-                    type: measurement.type,
-                    system: this.settings.measurementSystem,
-                    unit
-                });
 
                 // Create entry line using template
                 const entry = this.settings.measurementEntryTemplate
@@ -64,8 +48,6 @@ ${chartData.join('\n')}
                     .replace(/<measure>/g, value)
                     .replace(/<unit>/g, unit);
 
-                console.log('MeasurementService: Created entry:', entry);
-
                 // Get or create file with template
                 let content = '';
                 let measurementData: Array<{ date: string, value: string }> = [];
@@ -73,16 +55,13 @@ ${chartData.join('\n')}
 
                 if (existingFile instanceof TFile) {
                     content = await this.app.vault.read(existingFile);
-                    console.log('MeasurementService: Found existing file');
                     // Parse existing data from the table
                     const tableLines = content.split('\n').filter(line => line.startsWith('|') && line.includes(unit));
                     measurementData = tableLines.map(line => {
                         const [date, , value] = line.split('|').map(cell => cell.trim());
                         return { date, value: value.replace(unit, '').trim() };
                     });
-                    console.log('MeasurementService: Parsed existing data:', measurementData);
                 } else {
-                    console.log('MeasurementService: Creating new file');
                     // Create new file with template if it exists
                     if (this.settings.measurementFileTemplate) {
                         const templateFile = this.app.vault.getAbstractFileByPath(this.settings.measurementFileTemplate);
@@ -93,14 +72,12 @@ ${chartData.join('\n')}
                                 .replace(/<measurementName>/g, measurement.name)
                                 .replace(/<measurementType>/g, measurement.type)
                                 .replace(/<unit>/g, unit);
-                            console.log('MeasurementService: Applied template from file');
                         }
                     }
 
                     // If no template or template file not found, use default header
                     if (!content) {
                         content = `# ${measurement.name} History\n\n| Date | User | Value |\n|------|------|-------|\n`;
-                        console.log('MeasurementService: Using default header');
                     }
                 }
 
@@ -115,19 +92,17 @@ ${chartData.join('\n')}
                 if (newContent.includes('```mermaid')) {
                     // Replace existing chart
                     newContent = newContent.replace(/```mermaid[\s\S]*?```/, chartSection);
-                    console.log('MeasurementService: Updated existing chart');
                 } else {
                     // Add new chart after the table
                     newContent = newContent + '\n' + entry + '\n\n' + chartSection;
-                    console.log('MeasurementService: Added new entry and chart');
                 }
 
                 if (existingFile instanceof TFile) {
                     await this.app.vault.modify(existingFile, newContent);
-                    console.log('MeasurementService: Updated existing file');
+                    new Notice(`Updated ${measurement.name} measurement file`);
                 } else {
                     await this.app.vault.create(filePath, newContent);
-                    console.log('MeasurementService: Created new file');
+                    new Notice(`Created ${measurement.name} measurement file`);
                 }
             }
         }

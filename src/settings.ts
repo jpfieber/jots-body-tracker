@@ -525,5 +525,50 @@ export class BodyTrackerSettingsTab extends PluginSettingTab {
                 this.display();
             }
         });
+
+        // Add website and coffee sections at the end
+        this.addWebsiteSection(containerEl);
+        this.addCoffeeSection(containerEl);
+    }
+
+    private addWebsiteSection(containerEl: HTMLElement) {
+        const websiteDiv = containerEl.createEl('div', { cls: 'jots-sleep-tracker-website-section' });
+
+        const logoLink = websiteDiv.createEl('a', { href: 'https://jots.life' });
+        logoLink.setAttribute('target', '_blank');
+
+        logoLink.createEl('img', {
+            attr: {
+                src: 'https://jots.life/jots-logo-512/',
+                alt: 'JOTS Logo',
+            },
+        });
+
+        const descriptionDiv = websiteDiv.createEl('div', { cls: 'jots-sleep-tracker-website-description' });
+
+        descriptionDiv.appendText('While this plugin works on its own, it is part of a system called ');
+        const jotsLink = descriptionDiv.createEl('a', {
+            text: 'JOTS',
+            href: 'https://jots.life'
+        });
+        jotsLink.setAttribute('target', '_blank');
+        descriptionDiv.appendText(' that helps capture, organize, and visualize your life\'s details.');
+    }
+
+    private addCoffeeSection(containerEl: HTMLElement) {
+        const coffeeDiv = containerEl.createEl('div', { cls: 'jots-sleep-tracker-buy-me-coffee' });
+
+        const coffeeLink = coffeeDiv.createEl('a', {
+            href: 'https://www.buymeacoffee.com/jpfieber'
+        });
+        coffeeLink.setAttribute('target', '_blank');
+
+        coffeeLink.createEl('img', {
+            attr: {
+                src: 'https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png',
+                alt: 'Buy Me A Coffee'
+            },
+            cls: 'jots-sleep-tracker-bmc-button'
+        });
     }
 }
